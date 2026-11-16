@@ -370,12 +370,12 @@
   function frame(t) {
     var dt = Math.min(48, t - prev || 16.7) / 16.7; prev = t;
     var W = window.innerWidth, H = window.innerHeight, st = view.scrollTop;
-    var mobile = W < 768, inHero = playful && st < hero.offsetHeight * 0.7;      // IDLE_PLAY threshold
+    var mobile = W < 768, inHero = playful;      // the cats live in the hero yard and scroll away with it
     var s = mobile ? (inHero ? 32 : 48) : (inHero ? 48 : 64), gap = mobile ? 2 : 12, ledge = 8;
     var n = cats.length, packW = n * s + (n - 1) * gap;
     var r = stage.getBoundingClientRect();
     var foot = s * 29.5 / 32;                                                     // sprite feet sit 2.5px above its bottom
-    var ground = inHero ? Math.min(r.top + r.height * 0.55 - foot, H - s - ledge) : H - foot - ledge;
+    var ground = inHero ? r.top + r.height * 0.55 - foot : r.bottom - foot - ledge;   // Sleepy: curled up at the foot of the hero
     var resting = t - lastScrollAt > 1500;                                       // REST_OBSERVE
 
     var SC = window.ChibiroScene, info = inHero && SC ? SC.info() : null, dts = dt * 16.7 / 1000;
@@ -471,10 +471,14 @@
       });
 
       var bob = moving && c.bounce ? (step % 4 < 2 ? -c.bounce : 0) : 0;
-      var y = (c.ready && info ? c.y : Math.max(ledge, Math.min(H - s - ledge + s * 2.5 / 32, c.y))) + bob;
+      var y = c.y + bob;
       c.el.style.transform = 'translate3d(' + Math.round(c.x) + 'px,' + Math.round(y) + 'px,0)';
     });
     if (SC) SC.cats = catBoxes;
+    // only show the cats inside the hero, below the sticky nav, so they never ride along with the page
+    var hr = hero.getBoundingClientRect(), nb = navEl ? Math.max(0, navEl.getBoundingClientRect().bottom) : 0;
+    var clip = 'inset(' + Math.round(Math.max(0, hr.top, nb)) + 'px 0 ' + Math.round(Math.max(0, H - hr.bottom)) + 'px 0)';
+    if (clip !== layer._clip) { layer._clip = clip; layer.style.clipPath = clip; layer.style.visibility = hr.bottom <= nb ? 'hidden' : ''; }
     // light the cats like the scene: as they are at sunset, softly darker (and a touch cooler) at night; normal outside the hero
     var nt = info && info.W && SC.night ? Math.round(SC.night * 50) / 50 : 0;
     if (nt !== lastNight) {
