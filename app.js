@@ -1,10 +1,7 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var view = {   // the page itself scrolls
-    get scrollTop() { return window.scrollY; },
-    get scrollHeight() { return document.documentElement.scrollHeight; },
-    scrollTo: function (o) { window.scrollTo(o); },
-    addEventListener: function (a, b, c) { window.addEventListener(a, b, c); }
+    scrollTo: function (o) { window.scrollTo(o); }
   };
 
   /* ---------- Menu: Drinks / Snacks pages, 4×4 cards per page (2×4 on phones) ---------- */
@@ -49,10 +46,10 @@
   function renderMenu() {
     var group = MENU[shelf][cat[shelf]], list = group.items, n = perPage(), pages = Math.max(1, Math.ceil(list.length / n));
     page = Math.max(0, Math.min(pages - 1, page));
-    $('tabs').innerHTML = '<div class="menu-shelves">' + [['drinks', 'Drinks'], ['snacks', 'Snacks']].map(function (t) {
-      return '<button class="cb-tab" role="tab" aria-selected="' + (t[0] === shelf) + '" aria-controls="menu" data-shelf="' + t[0] + '">' + t[1] + '</button>';
+    $('tabs').innerHTML = '<div class="menu-shelves" role="group" aria-label="Menu">' + [['drinks', 'Drinks'], ['snacks', 'Snacks']].map(function (t) {
+      return '<button class="cb-tab" type="button" aria-pressed="' + (t[0] === shelf) + '" aria-controls="menu" data-shelf="' + t[0] + '">' + t[1] + '</button>';
     }).join('') + '</div><div class="menu-cats" role="group" aria-label="' + (shelf === 'drinks' ? 'Drink' : 'Snack') + ' categories">' + MENU[shelf].map(function (g, i) {
-      return '<button class="menu-cat" aria-pressed="' + (i === cat[shelf]) + '" data-cat="' + i + '">' + esc(g.cat) + ' <span class="menu-cat__n">' + g.items.length + '</span></button>';
+      return '<button class="menu-cat" type="button" aria-pressed="' + (i === cat[shelf]) + '" data-cat="' + i + '">' + esc(g.cat) + ' <span class="menu-cat__n">' + g.items.length + '</span></button>';
     }).join('') + '</div>';
     var cards = list.slice(page * n, page * n + n).map(function (it) {
       var temp = it[3] === 'i' ? '<span class="cb-tag cb-tag--ice">Iced</span>' : it[3] === 'h' ? '<span class="cb-tag cb-tag--hot">Hot</span>' : '';
@@ -68,14 +65,25 @@
       '<button class="cb-btn cb-btn--plain menu-pager__btn" data-page="1"' + (page < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">&gt;</button></nav>' : '';
     $('menu').innerHTML = '<div class="menu-grid">' + cards.join('') + '</div>' + pager;
   }
+  // renderMenu rebuilds the buttons, so hand focus back to the same button (or its neighbour) when it had focus
+  function refocus(had, sel, alt) {
+    if (!had) return;
+    var el = document.querySelector(sel);
+    if ((!el || el.disabled) && alt) el = document.querySelector(alt);
+    if (el && !el.disabled) el.focus();
+  }
   $('tabs').addEventListener('click', function (e) {
     var b = e.target.closest('[data-shelf],[data-cat]'); if (!b) return;
+    var had = document.activeElement === b, sel = b.dataset.shelf ? '#tabs [data-shelf="' + b.dataset.shelf + '"]' : '#tabs [data-cat="' + b.dataset.cat + '"]';
     if (b.dataset.shelf) { if (b.dataset.shelf === shelf) return; shelf = b.dataset.shelf; } else cat[shelf] = +b.dataset.cat;
-    page = 0; renderMenu();
+    page = 0; renderMenu(); refocus(had, sel);
   });
   $('menu').addEventListener('click', function (e) {
     var b = e.target.closest('[data-page],[data-goto]'); if (!b || b.disabled) return;
+    var had = document.activeElement === b;
     page = b.dataset.goto != null ? +b.dataset.goto : page + +b.dataset.page; renderMenu();
+    if (b.dataset.goto != null) refocus(had, '#menu [data-goto="' + page + '"]');
+    else refocus(had, '#menu [data-page="' + b.dataset.page + '"]', '#menu [data-page="' + -b.dataset.page + '"]');
   });
   if (small.addEventListener) small.addEventListener('change', function () { page = 0; renderMenu(); });
   renderMenu();
@@ -89,6 +97,8 @@
 
   /* ---------- Smooth-scroll links ---------- */
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var playful = !reduce;                                  // Cat Mode: Playful, or Sleepy (which holds every scene still)
+  function still() { return reduce || !playful; }
   document.addEventListener('click', function (e) {
     var a = e.target.closest('[data-go]');
     if (a) {
@@ -634,7 +644,7 @@
     function moveWalker(t, dt) {
       var w = walker;
       if (w.petUntil) { if (t < w.petUntil) { if (w.cat) w.cat.happy = Math.max(w.cat.happy, t + 200); return; } w.petUntil = 0; w.cat = null; w.cool = t + 6000; w.next = 0; w.face = -w.face; }
-      if (reduce) return;
+      if (still()) return;
       if (t > w.cool) {                                   // a cat right beside them: kneel down and give it a pat
         var near = dc.filter(function (c) { return Math.abs(c.y - w.yb) <= 6 && Math.abs(c.x - w.x) <= 20 && Math.abs(c.x - w.x) >= 8; })[0];
         if (near) { w.petUntil = t + 3200; w.cat = near; near.happy = t + 3400; near.tx = near.x; near.ty = near.y; w.face = near.x > w.x ? 1 : -1; w.tx = w.x; w.ty = w.yb; return; }
@@ -650,7 +660,7 @@
       g.drawImage(bg, 0, 0);
       var talk = Math.floor(t / 2600) % 2;
       pair.forEach(function (q, i) {                      // chatting in turns, sipping now and then
-        var chat = !reduce && talk === i, sip = !reduce && !chat && Math.sin(t * 0.0011 + q.ph) > 0.6;
+        var chat = !still() && talk === i, sip = !still() && !chat && Math.sin(t * 0.0011 + q.ph) > 0.6;
         q.sipping = sip;
         drawPerson(q, t, { sip: sip, mouth: chat && Math.floor(t / 200) % 2 === 0, gesture: chat && Math.floor(t / 900) % 2 === 0, bubble: chat && Math.floor(t / 2600) % 4 < 2 });
       });
@@ -659,7 +669,7 @@
         rect(s.x - 1, s.yb - 17, 3, 4, '#ffd27a'); rect(s.x - 1, s.yb - 18, 3, 1, '#2c1a12'); rect(s.x - 1, s.yb - 13, 3, 1, '#2c1a12');
         if (k === 1) pair.forEach(function (q, i) { if (!q.sipping) cup(s.x + (i ? 5 : -7), s.yb - 15); });
       });
-      var o = !reduce && Math.sin(t * 0.0009 + stand.ph) > 0.75;
+      var o = !still() && Math.sin(t * 0.0009 + stand.ph) > 0.75;
       var list = [[stand, { sip: o, cup: !o }], [walker, walker.petUntil && t < walker.petUntil ? { bend: true, pat: Math.floor(t / 260) % 2 } : { step: walker.moving ? Math.floor(walker.dist / 2.5) % 4 : 0, cup: false }]];
       list.sort(function (a, b) { return a[0].yb - b[0].yb; }).forEach(function (e) { if (e[0].yb > 0) drawPerson(e[0], t, e[1]); });
     }
@@ -696,33 +706,36 @@
     }
     layout(); dc.forEach(function (c) { place(c); }); wPlace(); den._walker = walker;
     var rt; window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(layout, 150); });
-    var seen = true, prevT = 0, lastPaint = 0;
-    if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { seen = es[0].isIntersecting; }).observe(den);
+    // the loop only runs while the footer yard is on screen; off screen it stops completely
+    var seen = true, prevT = 0, lastPaint = 0, running = false;
+    function start() { if (running || !seen) return; running = true; prevT = performance.now(); requestAnimationFrame(tick); }
+    if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { seen = es[0].isIntersecting; start(); }).observe(den);
     function tick(t) {
+      if (!seen) { running = false; return; }
       var dt = Math.min(0.05, (t - prevT) / 1000 || 0.016); prevT = t;
-      if (seen) { moveWalker(t, dt); if (t - lastPaint > 60) { lastPaint = t; paint(t); } }
-      if (seen) dc.forEach(function (c) {
-        if (!reduce && t > c.next && !c.moving) { pick(c); c.next = t + 3000 + Math.random() * 5000; }
+      moveWalker(t, dt); if (t - lastPaint > 60) { lastPaint = t; paint(t); }
+      dc.forEach(function (c) {
+        if (!still() && t > c.next && !c.moving) { pick(c); c.next = t + 3000 + Math.random() * 5000; }
         var dx = c.tx - c.x, dy = c.ty - c.y, d = Math.sqrt(dx * dx + dy * dy);
-        if (d > 0.3 && !(t < c.happy)) {
+        if (d > 0.3 && !(t < c.happy) && !still()) {
           var s = Math.min(d, c.v * dt), nx = c.x + dx / d * s, ny = c.y + dy / d * s;
           if (!free(c, nx, ny)) { c.tx = c.x; c.ty = c.y; c.moving = false; c.next = t + 700; }   // someone stepped in the way: stop and rethink
           else { c.x = nx; c.y = ny; c.moving = true; if (Math.abs(dx) > 0.2) c.face = dx > 0 ? 1 : -1; c.walk = (c.walk + s * 0.9 + 0.04) % 8; }
         } else c.moving = false;
         if (t > c.blinkNext) { c.blink = t + 150; c.blinkNext = t + 2500 + Math.random() * 3500; }
-        if (!reduce) c.tailT += dt * (c.moving ? 12 : 3.5);
+        if (!still()) c.tailT += dt * (c.moving ? 12 : 3.5);
         draw(c, t);
       });
       requestAnimationFrame(tick);
     }
     dc.forEach(function (c) { draw(c, 0); });
-    requestAnimationFrame(tick);
+    start();
   })();
 
   /* ---------- Five-cat engine (PRD 4.1 – 4.2) ---------- */
   var layer = $('cats'), stage = $('stage'), hero = $('top'), yarnEl = $('yarn');
   var HEART = 'assets/heart.svg', NOTE = 'assets/note.svg';
-  var playful = !reduce, sound = false;
+  var sound = false;
   // ease = how fast each cat closes on its target; bounce = extra hop in px while walking
   var DEFS = [
     // v = walking speed around the hero yard, in scene pixels per second
@@ -753,12 +766,11 @@
   function hit(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
   function catBox(x, y) { return [x - 7, y - 14, x + 7, y]; }                     // a cat's footprint in scene px, feet at (x, y)
   function buildGrid(info) {
-    var cols = Math.ceil(info.W / CELL), rows = Math.ceil(info.H / CELL), free = new Uint8Array(cols * rows), sky = null, sk = $('skyToggle');
-    if (sk) { var b = sk.getBoundingClientRect(), R0 = info.rect; sky = [(b.left - R0.left) / info.P - 2, (b.top - R0.top) / info.P - 2, (b.right - R0.left) / info.P + 2, (b.bottom - R0.top) / info.P + 2]; }
+    var cols = Math.ceil(info.W / CELL), rows = Math.ceil(info.H / CELL), free = new Uint8Array(cols * rows);
     for (var j = 0; j < rows; j++) for (var i = 0; i < cols; i++) {
       var fx = i * CELL + 2, fy = j * CELL + 2;
       if (fy < info.yardTop + 16 || fy > info.H - 2 || fx < 9 || fx > info.W - 9) continue;
-      var bx = [fx - 8, fy - 15, fx + 8, fy + 1], ok = !(sky && hit(bx, sky));
+      var bx = [fx - 8, fy - 15, fx + 8, fy + 1], ok = true;
       for (var k = 0; ok && k < info.statics.length; k++) if (hit(bx, info.statics[k])) ok = false;
       free[j * cols + i] = ok ? 1 : 0;
     }
@@ -817,23 +829,17 @@
     m.ax = nx; m.ay = ny; if (d <= st) m.path.shift();
     return Math.min(d, st);
   }
-  var lastTop = 0, lastScrollAt = -1e9, dir = 1, prev = 0;
-
-  view.addEventListener('scroll', function () {
-    var st = view.scrollTop;
-    if (st !== lastTop) { dir = st > lastTop ? 1 : -1; lastTop = st; lastScrollAt = performance.now(); }
-  }, { passive: true });
+  var prev = 0;
 
   function frame(t) {
     var dt = Math.min(48, t - prev || 16.7) / 16.7; prev = t;
-    var W = window.innerWidth, H = window.innerHeight, st = view.scrollTop;
+    var W = window.innerWidth, H = window.innerHeight;
     var mobile = W < 768, inHero = playful;      // the cats live in the hero yard and scroll away with it
     var s = mobile ? (inHero ? 32 : 48) : (inHero ? 48 : 64), gap = mobile ? 2 : 12, ledge = 8;
     var n = cats.length, packW = n * s + (n - 1) * gap;
     var r = stage.getBoundingClientRect();
     var foot = s * 29.5 / 32;                                                     // sprite feet sit 2.5px above its bottom
     var ground = inHero ? r.top + r.height * 0.55 - foot : r.bottom - foot - ledge;   // Sleepy: curled up at the foot of the hero
-    var resting = t - lastScrollAt > 1500;                                       // REST_OBSERVE
 
     var SC = window.ChibiroScene, info = inHero && SC ? SC.info() : null, dts = dt * 16.7 / 1000;
     if (info && info.W) {
@@ -888,22 +894,18 @@
       } else {
       if (!playful) {                                   // Sleepy: docked bottom-right
         tx = W - ledge - packW + c.i * (s + gap);
-      } else if (inHero) {                              // IDLE_PLAY
+      } else {                                          // IDLE_PLAY
         if (c.role === 'leader') tx = yarn.x - s + 6;
         else if (c.role === 'sit') tx = W * 0.78;
         else {
           if (t > c.next) { c.wx = 0.05 + Math.random() * 0.85; c.next = t + 2500 + Math.random() * 4000 * (1 + c.i * 0.3); }
           tx = c.wx * (W - s);
         }
-      } else {                                          // SCROLL_CHASE: the pack tracks scroll progress, leader in front
-        var max = view.scrollHeight - H, p = max > 0 ? st / max : 0;
-        var lead = ledge + p * (W - 2 * ledge - packW);
-        tx = lead + (dir > 0 ? n - 1 - c.i : c.i) * (s + gap);
       }
       c.x += (tx - c.x) * Math.min(1, c.ease * dt);
       c.x = Math.max(ledge, Math.min(W - ledge - s, c.x));                        // STAY_VISIBLE
       c.y = c.y < 0 ? ground : c.y + (ground - c.y) * Math.min(1, 0.15 * dt);
-      moving = playful && Math.abs(tx - c.x) > 3 && !(resting && !inHero && Math.abs(tx - c.x) < 12);
+      moving = playful && Math.abs(tx - c.x) > 3;
       if (moving) {
         var face = tx > c.x ? 1 : -1;
         if (face !== c.face) { c.face = face; c.el.classList.toggle('cb-cat--flip', face < 0); }
@@ -916,14 +918,14 @@
       // ears, blinks and tail
       if (t > c.earNext) { c.earUntil = t + 240; c.earSide = Math.random() < 0.5 ? 1 : 2; c.earNext = t + 1800 + Math.random() * 4500; }
       if (t > c.blinkNext) { c.blinkUntil = t + 150; c.blinkNext = t + 2500 + Math.random() * 3500; }
-      if (!reduce) c.tailT += dt * (moving ? 0.2 : playful ? 0.06 : 0.025);
+      if (!still() || moving) c.tailT += dt * (moving ? 0.2 : 0.06);   // Sleepy: tails rest too
       var pet = t < c.petUntil, step = Math.floor(c.walk);
       var pose = moving || t - c.lastMove < 350 ? 'walk' : 'sit';
       if (pose === 'walk' && !moving) step = 0;
       renderCat(c, {
         pose: pose, step: step, pet: pet,
         tail: pet ? 0 : Math.round(Math.sin(c.tailT) * 2),
-        ear: !reduce && t < c.earUntil ? c.earSide : 0,
+        ear: !still() && t < c.earUntil ? c.earSide : 0,
         eyes: pet ? 'happy' : !playful ? 'sleep' : t < c.blinkUntil ? 'blink' : 'open'
       });
 
@@ -943,9 +945,13 @@
       var f = nt ? 'brightness(' + (1 - 0.48 * nt).toFixed(2) + ') saturate(' + (1 - 0.4 * nt).toFixed(2) + ') hue-rotate(' + Math.round(-10 * nt) + 'deg)' : '';
       cats.forEach(function (c) { c.cv.style.filter = f; }); yarnEl.style.filter = f;
     }
-    requestAnimationFrame(frame);
+    if (heroOn) requestAnimationFrame(frame); else running = false;
   }
-  requestAnimationFrame(frame);
+  // the hero cats only animate while the hero is on screen; the last frame above hides them, then the loop stops
+  var heroOn = true, running = false;
+  function startCats() { if (running) return; running = true; prev = performance.now(); requestAnimationFrame(frame); }
+  if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { heroOn = es[0].isIntersecting; if (heroOn) startCats(); }).observe(hero);
+  startCats();
 
   /* ---------- PET_REACTION ---------- */
   var ac;
@@ -975,6 +981,9 @@
   /* ---------- Toggles ---------- */
   function setToggle(btn, on, label) { btn.setAttribute('aria-checked', on); btn.querySelector('.cb-toggle__state').textContent = label; }
   $('soundToggle').addEventListener('click', function () { sound = !sound; setToggle(this, sound, sound ? 'On' : 'Off'); if (sound) meow(); });
-  $('catToggle').addEventListener('click', function () { playful = !playful; setToggle(this, playful, playful ? 'Playful' : 'Sleepy'); });
+  $('catToggle').addEventListener('click', function () {
+    playful = !playful; setToggle(this, playful, playful ? 'Playful' : 'Sleepy');
+    if (window.ChibiroScene && window.ChibiroScene.setPaused) window.ChibiroScene.setPaused(!playful);   // Sleepy holds the hero scene still too
+  });
   setToggle($('catToggle'), playful, playful ? 'Playful' : 'Sleepy');
 })();

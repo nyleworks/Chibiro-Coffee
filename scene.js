@@ -9,14 +9,14 @@
    the phase that matches their local time. */
 (function () {
   var hero = document.getElementById('top'), cvs = document.getElementById('scene'),
-      stage = document.getElementById('stage'), btn = document.getElementById('skyToggle'),
-      label = document.getElementById('skyLabel'), copy = hero && hero.querySelector('.hero__copy');
+      copy = hero && hero.querySelector('.hero__copy');
   if (!hero || !cvs || !cvs.getContext) return;
   var ctx = cvs.getContext('2d');
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // reduce = hold the scene still: the visitor's reduce-motion setting, or Cat Mode "Sleepy" (app.js calls ChibiroScene.setPaused)
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches, osReduce = reduce;
 
   /* ---------- Palettes: sky per phase; everything else is tinted by the phase ---------- */
-  var NAMES = ['Sunset', 'Night'], NP = 2;
+  var NP = 2;   // Sunset, Night
   var RAW = [
     { skyTop: '#3d3a80', skyMid: '#c95f7c', skyLow: '#ffb35c', cloud: '#ffc490', cloudShade: '#c86c7c', sun: '#ffdc80', sunGlow: '#ff9a50',
       moon: '#f4ecd0', moonShade: '#c9c0a0', tint: '#8a4a6a', tintA: 0.3, glow: 0.55, stars: 0.18, sunGlowA: 0.85, birds: 1 },
@@ -53,13 +53,6 @@
     var e = ((clock % LOOP) + LOOP) % LOOP, seg = Math.floor(e / SEG), w = e - seg * SEG;
     return w < HOLD ? seg : seg + smooth((w - HOLD) / FADE);
   }
-  if (btn) btn.addEventListener('click', function () {
-    var e = ((clock % LOOP) + LOOP) % LOOP, seg = Math.floor(e / SEG), w = e - seg * SEG;
-    if (reduce) clock = (seg + 1) * SEG;
-    else if (w < HOLD) clock += HOLD - w;
-    else clock += SEG - w + HOLD;
-    if (reduce) draw(performance.now());
-  });
 
   /* ---------- Layout (rebuilt on resize) ---------- */
   var W = 0, H = 0, P = 3, skyTop = 0, panelB = 0, yardTop, yd;
@@ -675,25 +668,25 @@
       ctx.globalAlpha = (p.stars - 0.3) / 0.7 * (reduce ? 0.8 : 0.5 + 0.5 * Math.sin(t * 0.004 + fl.ph));
       rect(fx, fy, 1, 1, '#eaf78c'); ctx.globalAlpha = 1;
     });
-
-    var now = Math.round(f) % NP;
-    if (hero.getAttribute('data-phase') !== String(now)) {
-      hero.setAttribute('data-phase', now);
-      if (label) label.textContent = NAMES[now];
-      if (btn) btn.setAttribute('aria-label', 'Time of day: ' + NAMES[now] + '. Change to ' + NAMES[(now + 1) % NP]);
-    }
   }
 
-  var visible = true, last = 0, prevT = 0;
-  if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { visible = es[0].isIntersecting; }).observe(hero);
+  // The loop only runs while the hero is on screen and the scene isn't held still; off screen it stops completely.
+  var visible = true, last = 0, prevT = 0, running = false;
+  function start() { if (running || reduce || !visible) return; running = true; prevT = performance.now(); requestAnimationFrame(loop); }
+  if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { visible = es[0].isIntersecting; start(); }).observe(hero);
   function loop(t) {
+    if (!visible || reduce) { running = false; return; }
     clock += Math.min(100, t - prevT || 0); prevT = t;
-    if (visible && t - last >= 66) { last = t; draw(t); }
+    if (t - last >= 66) { last = t; draw(t); }
     requestAnimationFrame(loop);
   }
+  API.setPaused = function (p) {                          // Cat Mode "Sleepy" freezes the whole scene where it is
+    reduce = osReduce || !!p;
+    if (reduce) draw(performance.now()); else start();
+  };
   if ('ResizeObserver' in window) { var ro = new ResizeObserver(resize); ro.observe(hero); if (copy) ro.observe(copy); }
   else window.addEventListener('resize', resize);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(resize);
   resize();
-  if (!reduce) requestAnimationFrame(loop);
+  start();
 })();
