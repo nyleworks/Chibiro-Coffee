@@ -8,4 +8,4 @@ A plain static site with no build step. Open `index.html`, or serve the folder w
 - `styles.css`: styles
 - `app.js`: menu, pixel cats and page behaviour
 - `scene.js`: the animated pixel hero scene (sunset and night)
-- `assets/`: emblem and icons
+- `assets/`: logo, favicon and icons
