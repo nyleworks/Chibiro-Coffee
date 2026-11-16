@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chibiro Coffee — Home-Brewed Specialty Coffee in Likas</title>
+<meta name="description" content="Chibiro Coffee: cozy, cat-approved specialty coffee in Taman Jaya, Likas, Kota Kinabalu. Open Tuesday to Sunday, 3:08 PM – 12:08 AM.">
+<link rel="icon" href="assets/chibiro-emblem.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@400;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="cb">
+  <nav class="cb-nav" aria-label="Main">
+    <a class="cb-nav__brand" href="#top" data-go="top"><img src="assets/chibiro-emblem.svg" alt=""><span class="cb-nav__name">Chibiro Coffee</span></a>
+    <ul class="cb-nav__links">
+      <li><a href="#brews" data-go="brews">Our Brews</a></li>
+      <li><a href="#about" data-go="about">About</a></li>
+      <li><a href="#visit" data-go="visit">Visit Us</a></li>
+    </ul>
+    <div class="cb-nav__tools">
+      <button class="cb-toggle" id="soundToggle" role="switch" aria-checked="false"><span>Sound FX</span><span class="cb-toggle__track"></span><span class="cb-toggle__state">Off</span></button>
+      <button class="cb-toggle" id="catToggle" role="switch" aria-checked="true"><span>Cat Mode</span><span class="cb-toggle__track"></span><span class="cb-toggle__state">Playful</span></button>
+    </div>
+  </nav>
+
+  <header class="hero" id="top" data-phase="0">
+    <canvas class="hero__scene" id="scene" aria-hidden="true"></canvas>
+    <div class="hero__body">
+      <div class="hero__copy">
+        <span class="cb-sr-only">Taman Jaya · Likas · Kota Kinabalu</span>
+        <h1 class="cb-sr-only">Home-Brewed Specialty Coffee in Likas — Cat-Approved</h1>
+        <p class="cb-sr-only">A cozy late-afternoon-to-midnight hangout with free Wi-Fi, free parking, and seats indoors and out. Open Tuesday to Sunday, 3:08 PM – 12:08 AM.</p>
+        <div class="hero__cta">
+          <a class="cb-btn cb-btn--lg" href="#brews" data-go="brews">Explore Menu</a>
+          <a class="cb-btn cb-btn--lg cb-btn--plain" href="https://www.google.com/maps/search/?api=1&query=Chibiro+Coffee+Taman+Jaya+Likas+Kota+Kinabalu" target="_blank" rel="noopener">Find Us</a>
+        </div>
+      </div>
+    </div>
+    <div class="hero__stage" id="stage" aria-hidden="true"></div>
+  </header>
+
+  <section class="cb-section" id="brews">
+    <div class="cb-section__inner">
+      <h2 class="cb-section__title">Chibiro Brews &amp; Bites</h2>
+      <p class="cb-section__lead">Drinks or snacks? Café prices in MYR.</p>
+      <div class="cb-tabs" role="tablist" aria-label="Menu" id="tabs"></div>
+      <div id="menu" role="tabpanel"></div>
+      <div class="order">
+        <a class="cb-btn cb-btn--berry" href="https://wa.me/601166769396" target="_blank" rel="noopener">Order on WhatsApp</a>
+        <a class="cb-btn cb-btn--plain" href="#" data-todo="GrabFood link">Order on GrabFood</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="cb-section alt" id="about">
+    <div class="cb-section__inner">
+      <h2 class="cb-section__title">Why Hang Out Here?</h2>
+      <p class="cb-section__lead">Seven good reasons, none of them the cats.</p>
+      <div class="cb-grid perks" id="perks"></div>
+    </div>
+  </section>
+
+  <section class="cb-section" id="visit">
+    <div class="cb-section__inner">
+      <h2 class="cb-section__title">Visit Chibiro</h2>
+      <p class="cb-section__lead">Lorong Burung Segan, Taman Jaya, 88450 Kota Kinabalu, Sabah.</p>
+      <div class="visit">
+        <section class="cb-panel">
+          <h3 class="cb-panel__title">Hours</h3>
+          <dl class="cb-panel__rows">
+            <div class="cb-panel__row"><dt>Monday</dt><dd class="is-closed">Closed</dd></div>
+            <div class="cb-panel__row"><dt>Tuesday – Sunday</dt><dd>3:08 PM – 12:08 AM</dd></div>
+          </dl>
+        </section>
+        <section class="cb-panel">
+          <h3 class="cb-panel__title">Contact</h3>
+          <dl class="cb-panel__rows">
+            <div class="cb-panel__row"><dt>WhatsApp / Phone</dt><dd><a href="https://wa.me/601166769396" target="_blank" rel="noopener">+60 11-6676 9396</a></dd></div>
+            <div class="cb-panel__row"><dt>Parking</dt><dd>Free lot &amp; street</dd></div>
+          </dl>
+        </section>
+      </div>
+      <div class="visit__links">
+        <a class="cb-btn" href="https://www.google.com/maps/search/?api=1&query=Chibiro+Coffee+Taman+Jaya+Likas+Kota+Kinabalu" target="_blank" rel="noopener">Open in Google Maps</a>
+        <a class="cb-btn cb-btn--plain" href="#" data-todo="Instagram link">Instagram</a>
+        <a class="cb-btn cb-btn--plain" href="#" data-todo="Grab link">GrabFood / Grab Dine Out</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot cb-on-roast">
+    <img src="assets/chibiro-emblem.svg" alt="">
+    <p>Chibiro Coffee · Taman Jaya, Likas, Kota Kinabalu · Closed Mondays</p>
+  </footer>
+
+<div id="cats">
+  <div id="yarn" aria-hidden="true"></div>
+  <button class="cb-cat" aria-label="Pet the Calico"><canvas class="cb-cat__sprite" width="32" height="32"></canvas><span class="cb-cat__bubble"><img alt=""></span></button>
+  <button class="cb-cat" aria-label="Pet the Orange Tabby"><canvas class="cb-cat__sprite" width="32" height="32"></canvas><span class="cb-cat__bubble"><img alt=""></span></button>
+  <button class="cb-cat" aria-label="Pet the Siamese"><canvas class="cb-cat__sprite" width="32" height="32"></canvas><span class="cb-cat__bubble"><img alt=""></span></button>
+  <button class="cb-cat" aria-label="Pet the Tuxedo"><canvas class="cb-cat__sprite" width="32" height="32"></canvas><span class="cb-cat__bubble"><img alt=""></span></button>
+  <button class="cb-cat" aria-label="Pet the Scottish Fold"><canvas class="cb-cat__sprite" width="32" height="32"></canvas><span class="cb-cat__bubble"><img alt=""></span></button>
+</div>
+
+<script src="scene.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

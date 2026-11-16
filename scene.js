@@ -1,0 +1,699 @@
+/* Chibiro Coffee — hero backdrop.
+   A pixel-art take on the real Chibiro: a two-storey white house in Taman Jaya with a carport,
+   a red-awning porch with the red sofa, an upstairs balcony, grille windows and AC units. In
+   front is a gravel yard of folding tables, mesh camping chairs and a dome tent under a canopy
+   of fairy lights strung from a tall pole. On either side are the neighbours (a blue house on
+   the left, a white semi-D on the right), with power lines, a water tank and trees behind.
+   Drawn on a low-res canvas and scaled up with crisp pixels. The café opens 3 PM to 12:08 AM, so
+   it only cycles Sunset ⇄ Night, and the "Sky" button jumps to the other one. Visitors start on
+   the phase that matches their local time. */
+(function () {
+  var hero = document.getElementById('top'), cvs = document.getElementById('scene'),
+      stage = document.getElementById('stage'), btn = document.getElementById('skyToggle'),
+      label = document.getElementById('skyLabel'), copy = hero && hero.querySelector('.hero__copy');
+  if (!hero || !cvs || !cvs.getContext) return;
+  var ctx = cvs.getContext('2d');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Palettes: sky per phase; everything else is tinted by the phase ---------- */
+  var NAMES = ['Sunset', 'Night'], NP = 2;
+  var RAW = [
+    { skyTop: '#3d3a80', skyMid: '#c95f7c', skyLow: '#ffb35c', cloud: '#ffc490', cloudShade: '#c86c7c', sun: '#ffdc80', sunGlow: '#ff9a50',
+      moon: '#f4ecd0', moonShade: '#c9c0a0', tint: '#8a4a6a', tintA: 0.3, glow: 0.55, stars: 0.18, sunGlowA: 0.85, birds: 1 },
+    { skyTop: '#0a0c24', skyMid: '#181d48', skyLow: '#2c3064', cloud: '#363d72', cloudShade: '#232854', sun: '#ffdc80', sunGlow: '#ff9a50',
+      moon: '#f6eed2', moonShade: '#c4bb9c', tint: '#12152e', tintA: 0.66, glow: 1, stars: 1, sunGlowA: 0, birds: 0 }
+  ];
+  var rgbCache = {};
+  function rgb(h) { if (rgbCache[h]) return rgbCache[h]; var n = parseInt(h.slice(1), 16); return (rgbCache[h] = [n >> 16 & 255, n >> 8 & 255, n & 255]); }
+  var PAL = RAW.map(function (p) { var o = {}; for (var k in p) o[k] = typeof p[k] === 'string' ? rgb(p[k]) : p[k]; return o; });
+  function css(c, a) { return a == null ? 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')' : 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+  function lerpC(a, b, t) { return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)]; }
+  function mix(f) {
+    var i = Math.floor(f) % NP, j = (i + 1) % NP, a = f - Math.floor(f), A = PAL[i], B = PAL[j], o = { c: {}, s: {} };
+    for (var k in A) {
+      if (typeof A[k] === 'number') o[k] = A[k] + (B[k] - A[k]) * a;
+      else { o.c[k] = lerpC(A[k], B[k], a); o.s[k] = css(o.c[k]); }
+    }
+    return o;
+  }
+  var P_ = null, tintCache = {};
+  function T(hex) { // a daytime colour, shifted toward the current phase's light
+    var v = tintCache[hex]; if (v) return v;
+    return (tintCache[hex] = css(lerpC(rgb(hex), P_.c.tint, P_.tintA)));
+  }
+  var WARM = '#ffe9a8', COOL = '#a8c4f0';
+  function lit(a) { return 'rgba(255,214,130,' + Math.max(0, Math.min(1, a)).toFixed(2) + ')'; }
+
+  /* ---------- Timeline ---------- */
+  var HOLD = 16000, FADE = 4000, SEG = HOLD + FADE, LOOP = SEG * NP;
+  var hr = new Date().getHours();
+  var clock = ((hr >= 6 && hr < 19) ? 0 : 1) * SEG;
+  function smooth(x) { return x * x * (3 - 2 * x); }
+  function phase() {
+    var e = ((clock % LOOP) + LOOP) % LOOP, seg = Math.floor(e / SEG), w = e - seg * SEG;
+    return w < HOLD ? seg : seg + smooth((w - HOLD) / FADE);
+  }
+  if (btn) btn.addEventListener('click', function () {
+    var e = ((clock % LOOP) + LOOP) % LOOP, seg = Math.floor(e / SEG), w = e - seg * SEG;
+    if (reduce) clock = (seg + 1) * SEG;
+    else if (w < HOLD) clock += HOLD - w;
+    else clock += SEG - w + HOLD;
+    if (reduce) draw(performance.now());
+  });
+
+  /* ---------- Layout (rebuilt on resize) ---------- */
+  var W = 0, H = 0, P = 3, skyTop = 0, panelB = 0, yardTop, yd;
+  var house = {}, sign = {}, lot = {}, hills = [], shops = [], bgTrees = [], wires = [], tower = null, nbL = null, nbR = null;
+  var furn = [], people = [], scene = [], tent = null, pole = null, strands = [], stars = [], clouds = [], birds = [], flies = [];
+  var skyImg = null, gravel = null, path = null, statics = [], openStand = null;
+  function overlap(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
+  function wbox(q, x) { return [x - 5, q.yb - 27, x + 5, q.yb + 1]; }
+  // shared with the cat sprites: the art grid, everything they must keep clear of, and (sent back) where the cats are
+  var API = window.ChibiroScene = { ver: 0, cats: [], holding: {}, pets: [], night: 0, info: function () {
+    return { P: P, W: W, H: H, yardTop: yardTop, rect: cvs.getBoundingClientRect(), ver: API.ver, statics: statics,
+             walkers: people.filter(function (q) { return q.pose === 'walk'; }).map(function (q) { return wbox(q, q.x); }) };
+  } };
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function signSize() { var k = clamp(Math.min(Math.floor((W * 0.78 - 8) / 27), Math.floor((H * 0.16 - 6) / 5)), 2, 6); return { k: k, w: 27 * k + (k + 2) * 2, h: 5 * k + (k + 2) * 2 }; }
+  // the gravel yard is a V: as wide as the house front at the porch, opening out toward the viewer at the curb
+  function edgeL(y) { return Math.round(path.lt + (path.lb - path.lt) * clamp((y - yardTop) / yd, 0, 1)); }
+  function edgeR(y) { return Math.round(path.rt + (path.rb - path.rt) * clamp((y - yardTop) / yd, 0, 1)); }
+
+  function layout() {
+    var R = rng(1208);
+    yd = clamp(Math.round(H * 0.28), 40, 120);
+    yardTop = H - yd;
+
+    // the CHIBIRO sign floats on its own, centred in the upper part of the frame
+    var s = signSize(), sy = panelB + Math.max(4, Math.round((H - panelB) * 0.05));
+    sign = { k: s.k, w: s.w, h: s.h, x: Math.round(W / 2 - s.w / 2), y: sy };
+    // the café house stands alone in the middle, below the sign
+    var bwMax = W < 300 ? Math.round(W * 0.66) : Math.min(Math.round(W * 0.4), 190);
+    var hh = clamp(yardTop - (sy + s.h) - 10, 50, 150);
+    var bw = clamp(Math.round(hh * 1.3), 80, bwMax);
+    hh = Math.min(hh, Math.round(bw / 1.05));
+    house = { x: Math.round(W / 2 - bw / 2), w: bw, h: hh, top: yardTop - hh };
+    house.roofH = Math.max(7, Math.round(hh * 0.12));
+    house.wallTop = house.top + house.roofH + 3;
+    house.uH = Math.round((yardTop - house.wallTop) * 0.47);
+    house.slab = house.wallTop + house.uH;
+    house.porchX = house.x + bw;
+    lot = { l: house.x - 4, r: house.x + bw + 10 };
+    var spread = Math.round(W * (W < 300 ? 0.1 : 0.04));
+    path = { lt: lot.l, rt: lot.r, lb: -spread, rb: W + spread };
+
+    // the neighbours sit back, small and hazy, with a clear gap on each side of the café
+    var nH = Math.round(hh * 0.58), nW = Math.round(bw * 0.6), gap = Math.max(14, Math.round(bw * 0.14));
+    nbL = { x: lot.l - gap - nW, w: nW, h: nH, wall: '#8cb8de', awning: '#c0443a', seed: 3 };
+    nbR = { x: lot.r + gap, w: nW, h: nH - 2, wall: '#efede6', awning: '#7f9fb4', seed: 7 };
+
+    // distant hills, a few low shophouses, trees and the neighbour's water tank behind
+    hills = []; var hmax = clamp((yardTop - skyTop) * 0.35, 8, 34);
+    for (var x = 0; x < W; x++) hills.push(Math.round(hmax * (0.6 + 0.25 * Math.sin(x * 0.021 + 0.6) + 0.15 * Math.sin(x * 0.07 + 2))));
+    shops = []; var smax = Math.max(8, Math.round(hh * 0.42));
+    for (x = -4; x < W;) { var sw = 16 + Math.floor(R() * 14); shops.push({ x: x, w: sw, h: Math.round(smax * (0.7 + R() * 0.3)), col: ['#e8dccb', '#d6e0dc', '#e6d0c0', '#dcd4e2'][Math.floor(R() * 4)], seed: Math.floor(R() * 999) }); x += sw + 1; }
+    bgTrees = [];
+    for (x = 6; x < W; x += 22 + Math.floor(R() * 16)) { if (x > lot.l - 4 && x < lot.r + 4) continue; bgTrees.push({ x: x, r: 6 + Math.floor(R() * 6), y: yardTop - Math.round(hh * (0.5 + R() * 0.25)), seed: Math.floor(R() * 99) }); }
+    tower = { x: nbR.x + Math.round(nbR.w * 0.55), top: yardTop - nbR.h - 14 };
+
+    // power lines sweeping across the whole frame, from a pole at the left
+    wires = []; var wy = Math.max(sign.y + sign.h + 4, house.top - 4);
+    for (var i = 0; i < 3; i++) wires.push({ y1: wy + i * 3, y2: wy + i * 4 + 6, sag: 4 + i });
+
+    // furniture in the gravel yard
+    var gy = yardTop + 5;
+    var tb = gy + Math.round(yd * 0.3);
+    tent = { x: edgeL(tb) + 6, w: Math.max(28, Math.round(bw * 0.26)), base: tb };
+    tent.h = Math.round(tent.w * 0.62);
+    openStand = { x: house.x + Math.round(house.w * 0.1) + 23, yb: yardTop + 9 };   // just right of the front door
+    if (overlap([openStand.x - 12, openStand.yb - 20, openStand.x + 12, openStand.yb + 2], [tent.x - 2, tent.base - tent.h - 2, tent.x + tent.w + 2, tent.base + 2])) tent.base = openStand.yb + tent.h + 5;   // tent steps forward to clear the sign
+    pole = { x: tent.x + tent.w + 6, base: gy + Math.round(yd * 0.36), top: house.wallTop - 10 };
+    if (pole.x + 4 > openStand.x - 12 && pole.x - 2 < openStand.x + 12) pole.x = Math.max(2, tent.x - 7);   // pole moves to the yard edge, beside the tent, so it never stands in the sign
+    furn = []; people = [];
+    var small = W < 300, pairY = yardTop + Math.round(yd * 0.55), pairX = Math.round(W / 2 + (Math.min(W, edgeR(pairY)) - W / 2) * 0.5);
+    var rowGap = 27, firstRow = gy + 16, seatLeft = small ? 4 : 6;
+    var porchX = Math.min(W - 6, house.x + house.w + 4), keepOut = [[openStand.x - 12, openStand.yb - 20, openStand.x + 12, openStand.yb + 2],[tent.x - 2, tent.base - tent.h - 2, tent.x + tent.w + 2, tent.base + 2],
+      [pole.x - 2, pole.top, pole.x + 4, pole.base + 2], [pairX - 13, pairY - 35, pairX + 13, pairY + 2], [porchX - 7, yardTop - 19, porchX + 7, yardTop + 11]];
+    // rows spread evenly from the porch to the bottom edge, every set fully on screen;
+    // each row holds as many evenly spaced sets as fit inside the V, nudged around the tent, pole and standing people
+    var lastRow = H - 2, nRows = Math.max(1, Math.floor((lastRow - firstRow) / rowGap) + 1), step = nRows > 1 ? (lastRow - firstRow) / (nRows - 1) : 0, gapX = small ? 50 : 58;
+    function fits(x, y) {
+      var fb = [x - 24, y - 27, x + 24, y + 2];
+      if (x - 21 < Math.max(1, edgeL(y - 8)) || x + 21 > Math.min(W - 1, edgeR(y - 8))) return false;
+      if (y < yardTop + 16 && x > house.porchX - 10) return false;
+      if (keepOut.some(function (k) { return overlap(fb, k); })) return false;
+      return !furn.some(function (o) { return Math.abs(o.x - x) < 49 && Math.abs(o.yb - y) < 27; });
+    }
+    for (var row = 0; row < nRows; row++) {
+      var ty = Math.round(firstRow + row * step), el = Math.max(1, edgeL(ty - 8)) + 24, er = Math.min(W - 1, edgeR(ty - 8)) - 24;
+      if (er < el) continue;
+      var k = Math.max(1, Math.floor((er - el) / gapX) + 1), sp = k > 1 ? (er - el) / (k - 1) : 0;
+      for (var c = 0; c < k; c++) {
+        var cx = Math.round(k > 1 ? el + c * sp : (el + er) / 2), tx = null;
+        [0, 6, -6, 12, -12, 18, -18].some(function (d) { if (fits(cx + d, ty)) { tx = cx + d; return true; } return false; });
+        if (tx == null) continue;
+        var fu = { x: tx, yb: ty, kind: 'set', flip: R() < 0.5, seed: Math.floor(R() * 99), who: [null, null] };
+        for (var sd = 0; sd < 2; sd++) if (seatLeft > 0 && R() < 0.42) { fu.who[sd] = person(R, 'sit'); fu.who[sd].ph = R() * 6.3; seatLeft--; }
+        furn.push(fu);
+      }
+    }
+    // five more seated customers, filling tables in chatting pairs (own random stream, so the rest stays put)
+    var R2 = rng(508), extra = 5;
+    furn.forEach(function (f) { if (extra > 0 && !!f.who[0] !== !!f.who[1]) { var sd = f.who[0] ? 1 : 0; f.who[sd] = person(R2, 'sit'); f.who[sd].ph = R2() * 6.3; extra--; } });
+    furn.forEach(function (f) { for (var sd = 0; sd < 2; sd++) if (extra > 0 && !f.who[sd]) { f.who[sd] = person(R2, 'sit'); f.who[sd].ph = R2() * 6.3; extra--; } });
+
+    // customers on their feet: a pair chatting, someone with a takeaway cup by the porch, and people strolling
+    var a = person(R, 'stand'), b = person(R, 'stand');
+    a.x = pairX - 6; a.yb = pairY; a.face = 1; a.talker = 0; b.x = pairX + 6; b.yb = pairY; b.face = -1; b.talker = 1; b.cup = true;
+    people.push(a, b);
+    var c = person(R, 'stand'); c.x = porchX; c.yb = yardTop + 9; c.face = -1; c.cup = true; c.ph = R() * 6.3; people.push(c);
+    [0.4, 0.82].slice(0, small ? 1 : 2).forEach(function (fr, k) {
+      var w = person(R, 'walk'), y = yardTop + Math.round(yd * fr);
+      w.yb = y; w.lo = Math.max(6, edgeL(y) + 8); w.hi = Math.min(W - 6, edgeR(y) - 8);
+      w.x = w.lo + R() * (w.hi - w.lo); w.face = k ? -1 : 1; w.v = 6 + R() * 4; w.dist = 0; w.cup = k === 1;
+      people.push(w);
+    });
+    scene = [{ yb: openStand.yb, sign: true }].concat(furn.map(function (f) { return { yb: f.yb, f: f }; })).concat(people.map(function (q) { return { yb: q.yb, q: q }; }));
+    scene.sort(function (m, n) { return m.yb - n.yb; });
+    statics = [[openStand.x - 11, openStand.yb - 19, openStand.x + 11, openStand.yb + 1], [tent.x - 1, tent.base - tent.h - 1, tent.x + tent.w + 1, tent.base + 1], [pole.x - 1, pole.top, pole.x + 3, pole.base + 1]];
+    furn.forEach(function (f) { var hw = 23, top = 26; statics.push([f.x - hw, f.yb - top, f.x + hw, f.yb + 1]); });
+    people.forEach(function (q) { if (q.pose !== 'walk') statics.push([q.x - 6, q.yb - (q.talker != null ? 34 : 27), q.x + 6, q.yb + 1]); });
+    API.ver++;
+
+    // the fairy-light canopy: strands from the pole top out to the house and the fences
+    var h = house, fy = h.wallTop - 1;
+    strands = [];
+    [0.08, 0.42, 0.76, 1].forEach(function (f) { strands.push([pole.x, pole.top, h.x + Math.round(h.w * f), fy, 3 + Math.round(f * 6)]); });
+    strands.push([pole.x, pole.top, Math.max(0, lot.l - 8), yardTop - 2, 6]);
+
+    // pre-render the gravel in daytime colours
+    var gw = Math.max(1, W), gh = Math.max(1, H - yardTop);
+    gravel = document.createElement('canvas'); gravel.width = gw; gravel.height = gh;
+    var g = gravel.getContext('2d'), tones = ['#b9b09c', '#a79e8a', '#cbc3b0', '#968d7a', '#b2a994'];
+    g.fillStyle = tones[0]; g.fillRect(0, 0, gw, gh);
+    for (var yy = 0; yy < gh; yy++) for (var xx = 0; xx < gw; xx++) { var v = R(); if (v < 0.45) { g.fillStyle = tones[1 + Math.floor(v * 8.8) % 4]; g.fillRect(xx, yy, 1, 1); } }
+
+    stars = []; var sBot = Math.max(skyTop + 6, house.top - 6), nS = Math.round(W * (sBot - skyTop) / 300);
+    for (i = 0; i < nS; i++) {
+      var st = { x: Math.floor(R() * W), y: Math.floor(skyTop + R() * (sBot - skyTop)), b: R() < 0.06, ph: R() * 6.3 };
+      if (st.x > sign.x - 3 && st.x < sign.x + sign.w + 3 && st.y > sign.y - 3 && st.y < sign.y + sign.h + 3) continue;   // not behind the sign
+      stars.push(st);
+    }
+    clouds = []; var nC = Math.max(3, Math.round(W / 70));
+    for (i = 0; i < nC; i++) clouds.push({ x: R() * (W + 40) - 20, y: Math.round(skyTop + 6 + R() * Math.max(6, (house.top - skyTop) * 0.45)), s: R() < 0.45 ? 2 : 1, v: 0.6 + R() * 0.9 });
+    birds = []; for (i = 0; i < 3; i++) birds.push({ x: R() * W, y: skyTop + 8 + R() * Math.max(8, (house.top - skyTop) * 0.5), v: 4 + R() * 4, ph: R() * 2 });
+    flies = []; for (i = 0; i < 7; i++) { var fy0 = yardTop + R() * yd; flies.push({ x: edgeL(fy0) + R() * (edgeR(fy0) - edgeL(fy0)), y: fy0 - 6, ph: R() * 6.3 }); }
+    skyImg = ctx.createImageData(W, Math.max(1, yardTop));
+  }
+
+  function resize() {
+    var cw = hero.clientWidth, ch = hero.clientHeight;
+    if (!cw || !ch) return;
+    P = cw < 768 ? 2 : 3;   // same pixel size as the cat sprites (64px / 96px cats = 2× / 3×)
+    W = Math.ceil(cw / P); H = Math.ceil(ch / P);
+    cvs.width = W; cvs.height = H;
+    cvs.style.width = W * P + 'px'; cvs.style.height = H * P + 'px';
+    var top = hero.getBoundingClientRect().top;
+    panelB = copy ? clamp(Math.round((copy.getBoundingClientRect().bottom - top) / P) + 3, 0, Math.round(H * 0.7)) : 0;
+    skyTop = cw < 768 ? panelB : 0;
+    layout();
+    draw(performance.now());
+  }
+
+  /* ---------- Drawing helpers ---------- */
+  var BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5], OUT = '#2c1a12';
+  function rect(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); }
+  function disc(cx, cy, r, c) {
+    ctx.fillStyle = c;
+    for (var y = -Math.ceil(r); y <= Math.ceil(r); y++) {
+      var hw = Math.floor(Math.sqrt(Math.max(0, r * r - y * y)) + 0.35);
+      if (hw > 0 || Math.abs(y) < r) ctx.fillRect(Math.round(cx) - hw, Math.round(cy) + y, hw * 2 + 1, 1);
+    }
+  }
+  function glowDots(cx, cy, R, c, strength) {
+    ctx.fillStyle = c;
+    for (var y = -R; y <= R; y++) for (var x = -R; x <= R; x++) {
+      var d = Math.sqrt(x * x + y * y); if (d > R) continue;
+      var a = (1 - d / R) * strength, px = Math.round(cx) + x, py = Math.round(cy) + y;
+      if (a * 16 > BAYER[((py & 3) << 2) | (px & 3)] + 1) ctx.fillRect(px, py, 1, 1);
+    }
+  }
+  function sag(x1, y1, x2, y2, d, fn) {
+    var n = Math.max(1, Math.round(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1))));
+    for (var i = 0; i <= n; i++) { var t = i / n; fn(Math.round(x1 + (x2 - x1) * t), Math.round(y1 + (y2 - y1) * t + d * 4 * t * (1 - t)), i); }
+  }
+  function key4(K, f) { var u = Math.floor(f), a = f - u, A = K[u], B = K[u + 1]; return [A[0] + (B[0] - A[0]) * a, A[1] + (B[1] - A[1]) * a, A[2] + (B[2] - A[2]) * a]; }
+  var SUN = [[0.88, 0.8, 9], [0.95, 1.35, 9], [0.88, 0.8, 9]];   // y is a share of sky-top → horizon, so the sunset sun sits low
+  var MOON = [[0.1, 1.9, 5], [0.9, 0.6, 5], [0.96, 1.9, 5]];
+  var GLYPH = { C: [7, 4, 4, 4, 7], H: [5, 5, 7, 5, 5], I: [7, 2, 2, 2, 7], B: [6, 5, 6, 5, 6], R: [6, 5, 6, 5, 5], O: [7, 5, 5, 5, 7], P: [6, 5, 6, 4, 4], E: [7, 4, 6, 4, 7], N: [6, 5, 5, 5, 5] };
+  function text(s, x, y, c, k) {
+    k = k || 1; ctx.fillStyle = c;
+    for (var i = 0; i < s.length; i++) { var g = GLYPH[s[i]]; for (var r = 0; r < 5; r++) for (var b = 0; b < 3; b++) if (g[r] >> (2 - b) & 1) ctx.fillRect(x + (i * 4 + b) * k, y + r * k, k, k); }
+  }
+
+  function drawSky(p, sun, moon) {
+    var d = skyImg.data, hz = skyImg.height, top = p.c.skyTop, mid = p.c.skyMid, low = p.c.skyLow, bands = 10;
+    var sg = p.c.sunGlow, mg = p.c.moon, sA = p.sunGlowA, mA = 0.35 * clamp((p.stars - 0.18) / 0.82, 0, 1), sR = sun[2] * 3.4, mR = moon[2] * 3;
+    for (var y = 0; y < hz; y++) {
+      var t = y / Math.max(1, hz - 1), v = t * bands, b0 = Math.floor(v), fr = v - b0;
+      var c0 = grad(b0 / bands), c1 = grad(Math.min(bands, b0 + 1) / bands);
+      for (var x = 0; x < W; x++) {
+        var bay = BAYER[((y & 3) << 2) | (x & 3)], c = fr * 16 > bay ? c1 : c0, dx, dy, dd, a;
+        if (sA > 0.01) { dx = x - sun[0]; dy = y - sun[1]; dd = Math.sqrt(dx * dx + dy * dy); if (dd < sR) { a = Math.pow(1 - dd / sR, 1.4) * sA; if (a * 16 > bay) c = lerpC(c, sg, a > 0.5 ? 0.7 : 0.45); } }
+        if (mA > 0.01) { dx = x - moon[0]; dy = y - moon[1]; dd = Math.sqrt(dx * dx + dy * dy); if (dd < mR) { a = (1 - dd / mR) * mA; if (a * 16 > bay) c = lerpC(c, mg, 0.25); } }
+        var i = (y * W + x) * 4; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(skyImg, 0, 0);
+    function grad(t) { return t < 0.55 ? lerpC(top, mid, t / 0.55) : lerpC(mid, low, (t - 0.55) / 0.45); }
+  }
+  function drawCloud(x, y, s, p) {
+    var blobs = [[0, 0, 3], [4, -2, 4], [9, -1, 3.4], [13, 0, 2.6]];
+    for (var k = 0; k < 2; k++) {
+      var c = k ? p.s.cloud : p.s.cloudShade, o = k ? 0 : 1;
+      for (var i = 0; i < blobs.length; i++) disc(x + blobs[i][0] * s, y + blobs[i][1] * s + o, blobs[i][2] * s, c);
+      rect(Math.round(x - 2 * s), Math.round(y + o), Math.round(17 * s), Math.round(2 * s + 1), c);
+    }
+  }
+
+  /* ---------- Building parts ---------- */
+  function grilleWin(x, y, w, h, p, glow, diamond) { // window behind a metal security grille
+    rect(x - 1, y - 1, w + 2, h + 2, T('#d8d4cc'));
+    rect(x, y, w, h, glow > 0.3 ? css(lerpC(rgb('#3a4450'), rgb(diamond ? '#ffd28a' : '#b8d0f4'), Math.min(1, glow))) : T('#3e4854'));
+    if (glow < 0.3) rect(x + 1, y + 1, Math.max(1, Math.floor(w / 3)), 1, T('#6a7684'));
+    var gc = T('#f2f0ea');
+    if (diamond) { for (var yy = 0; yy < h; yy++) for (var xx = 0; xx < w; xx++) if ((xx + yy) % 6 === 0 || (xx - yy + 600) % 6 === 0) rect(x + xx, y + yy, 1, 1, gc); }
+    else { for (var gx = x + 3; gx < x + w; gx += 4) rect(gx, y, 1, h, gc); for (var gy = y + 3; gy < y + h; gy += 5) rect(x, gy, w, 1, gc); rect(x + Math.floor(w / 2), y, 1, h, T('#d8d4cc')); }
+  }
+  function acUnit(x, y, p) {
+    rect(x, y, 8, 6, T('#9a9a96')); rect(x, y, 8, 5, T('#e4e2dc'));
+    disc(x + 3, y + 2, 1.6, T('#9a9a96')); rect(x + 3, y + 2, 1, 1, T('#5a5a58')); rect(x + 6, y + 1, 1, 3, T('#c4c2bc'));
+  }
+  function corrugated(x, y, w, h, base, rib) { rect(x, y, w, h, T(base)); for (var i = x + 1; i < x + w; i += 2) rect(i, y, 1, h, T(rib)); }
+
+  function drawTwoStorey(n, p, side, haze) { // a neighbour's house, set back and softened by haze
+    var x = n.x, w = n.w, base = yardTop, top = base - n.h, rh = 4, wt = top + rh + 2, slab = wt + Math.round((base - wt) * 0.48);
+    for (var r = 0; r < rh; r++) rect(x - 5 + (rh - r), top + r, w + 10 - (rh - r) * 2, 1, T(side < 0 ? '#9a5040' : '#8a8a86'));
+    rect(x - 6, top + rh, w + 12, 2, T(side < 0 ? '#c0443a' : '#c8c4bc'));
+    rect(x, wt, w, base - wt, T(n.wall)); rect(side < 0 ? x + w - 2 : x, wt, 2, base - wt, 'rgba(44,26,18,0.12)');
+    var nw = Math.max(1, Math.floor((w - 6) / 16));
+    for (var i = 0; i < nw; i++) {
+      var wx = x + 4 + i * 16, on = p.glow > 0.4 && (n.seed + i) % 3 !== 0;
+      grilleWin(wx, wt + 4, 10, Math.max(6, Math.round((slab - wt) * 0.5)), p, on ? p.glow * 0.8 : 0, side > 0 && i % 2 === 0);
+    }
+    if (side > 0) acUnit(x + w - 14, wt + 3, p);
+    rect(x - 1, slab, w + 2, 2, T('#d8d4cc'));
+    corrugated(x - 2, slab + 3, w + 4, 3, n.awning, side < 0 ? '#9a3028' : '#5f7f94');
+    for (var px = x + 3; px < x + w; px += 22) rect(px, slab + 6, 1, base - slab - 6, T('#f2f0ea'));
+    rect(x + Math.round(w * 0.45), slab + 8, 9, base - slab - 8, T('#6a5040'));
+    rect(x - 6, top, w + 12, base - top, haze);
+  }
+
+  function drawHouse(t, p) {
+    var h = house, x = h.x, w = h.w, base = yardTop, glow = p.glow;
+    rect(x - 2, h.wallTop, w + 4, base - h.wallTop, T('#f2f0ea')); rect(x - 2, h.wallTop, 1, base - h.wallTop, T('#d4d0c8'));
+    rect(x - 1, h.wallTop, 2, base - h.wallTop, T('#d4d0c8')); rect(x + w - 2, h.wallTop, 2, base - h.wallTop, T('#dcd8d0'));
+    rect(x + 2, h.wallTop, 1, base - h.wallTop, T('#c8c4bc'));                                         // downpipe
+    var uy = h.wallTop + Math.max(2, Math.round(h.uH * 0.16)), uh = Math.max(8, Math.round(h.uH * 0.56));
+    var upLit = glow > 0.35 ? glow * 0.75 : 0;
+
+    var gy = h.slab + 4, gH = base - gy;
+    drawRoof(h, p);
+
+    // --- the café half
+    acUnit(x + 6, uy, p); acUnit(x + 6, uy + 7, p);
+    var lw = Math.max(12, Math.round(w * 0.24));
+    grilleWin(x + 18, uy, lw, uh, p, upLit * 0.6, true);
+    var bx = x + Math.round(w * 0.5), bwid = x + w - 5 - bx, dW = Math.max(7, Math.round(bwid * 0.3));
+    grilleWin(bx + 2, uy - 1, dW, uh + 2, p, upLit, true);                                              // balcony door
+    grilleWin(bx + dW + 6, uy, Math.max(8, bwid - dW - 6), uh, p, upLit * 0.8, true);
+    var ry = h.slab - 7;
+    rect(bx - 2, ry, bwid + 6, 1, T('#f8f6f0')); rect(bx - 2, ry + 1, bwid + 6, 1, T('#c8c4bc'));
+    for (var rx = bx - 1; rx < bx + bwid + 4; rx += 2) rect(rx, ry + 2, 1, 5, T('#e8e6e0'));
+    rect(x - 1, h.slab, w + 4, 3, T('#e4e0d8')); rect(x - 1, h.slab + 3, w + 4, 1, T('#b8b4ac'));
+    // porch under the red corrugated awning
+    rect(x, gy, w - 2, gH, T('#ece9e2'));
+    var dw = 10, dh = Math.round(gH * 0.74), dx = x + Math.round(w * 0.1);
+    // the front door stands open: a warm, lit interior with the door leaf swung inward
+    rect(dx - 1, base - dh - 1, dw + 2, dh + 1, T('#c8c4bc'));
+    var inside = css(lerpC(rgb('#e8b878'), rgb('#ffd890'), glow));
+    rect(dx, base - dh, dw, dh, inside); rect(dx, base - 3, dw, 3, css(lerpC(rgb('#a8784a'), rgb('#d8a060'), glow)));   // floor
+    rect(dx + 3, base - dh + 3, dw - 3, 1, 'rgba(120,70,40,0.35)');   // a pendant lamp's shade
+    rect(dx + 3, base - Math.round(dh * 0.45), dw - 3, 1, T('#7a4a30')); rect(dx + 3, base - Math.round(dh * 0.45) + 1, dw - 3, Math.round(dh * 0.45) - 4, T('#9a6440'));   // counter
+    rect(dx, base - dh, 3, dh, T('#7a3a2a')); rect(dx + 2, base - dh, 1, dh, T('#5a2a1e')); rect(dx + 1, base - Math.round(dh * 0.5), 1, 1, T('#e0b060'));   // open door leaf
+    var wx = dx + dw + 8, wW = Math.max(12, x + w - 6 - wx), wy = gy + 6, wH = Math.max(7, Math.round(gH * 0.44));
+    if (glow > 0.1) glowDots(wx + wW / 2, wy + wH / 2, Math.round(wW * 0.6), WARM, glow * 0.25);
+    grilleWin(wx, wy, wW, wH, p, glow > 0.1 ? glow : 0, true);
+    if (glow > 0.1) for (var lb = wx - 1; lb < wx + wW + 1; lb += 2) { rect(lb, wy - 1, 1, 1, WARM); rect(lb, wy + wH, 1, 1, WARM); }
+    var ay = gy + 1, aw = w + 8;
+    var sw = Math.min(34, wW + 4), sx = wx + Math.round((wW - sw) / 2);                                // red L-sofa
+    rect(sx, base - 9, sw, 3, T('#a02a24')); rect(sx, base - 6, sw, 5, T('#c0362c')); rect(sx, base - 1, sw, 1, T('#6a1a16'));
+    rect(sx - 3, base - 8, 4, 7, T('#a02a24')); rect(sx + sw - 1, base - 8, 3, 7, T('#a02a24'));
+    for (var c = sx + 7; c < sx + sw - 2; c += 8) rect(c, base - 6, 1, 4, T('#8a2420'));
+    rect(sx + 3, base - 9, 4, 3, T('#7a2420'));                                                         // cushion
+    rect(sx - 12, base - 5, 8, 1, T('#2e2a28')); rect(sx - 11, base - 4, 1, 4, T('#2e2a28')); rect(sx - 6, base - 4, 1, 4, T('#2e2a28'));
+    rect(sx - 10, base - 7, 2, 2, T('#fdf6e3'));
+    [dx - 6, dx + dw + 2].forEach(function (px) { rect(px, base - 5, 4, 5, T('#c0583e')); rect(px - 1, base - 9, 6, 4, T('#4f8a2a')); rect(px + 1, base - 11, 2, 2, T('#5a9a2e')); });
+    if (glow > 0.2) rect(x, gy + 5, w - 2, gH - 5, lit(glow * 0.12));
+    // the porch slab and red corrugated awning both reach forward, toward the viewer
+    var sl = 6;
+    for (var r = 0; r < sl; r++) { var e = Math.round(r * 1.6); rect(x - 4 - e, base + r, w + 10 + e * 2, 1, T(r === 0 ? '#e4e0d8' : r === sl - 1 ? '#b8b4ac' : '#cfcac0')); }
+    var ad = 7, aL0 = x - 3, aR0 = x + w + 5, fL = aL0 - Math.round(ad * 1.7), fR = aR0 + Math.round(ad * 1.7), ribs = Math.round((aR0 - aL0) / 2);
+    rect(fL + 1, ay + ad + 2, 1, base + sl - 1 - (ay + ad + 2), T('#f8f6f0')); rect(fR - 2, ay + ad + 2, 1, base + sl - 1 - (ay + ad + 2), T('#f8f6f0'));   // posts
+    rect(fL + 2, ay + ad + 2, 1, base + sl - 1 - (ay + ad + 2), T('#c8c4bc')); rect(fR - 1, ay + ad + 2, 1, base + sl - 1 - (ay + ad + 2), T('#c8c4bc'));
+    for (r = 0; r < ad; r++) {
+      var u = r / (ad - 1), l = Math.round(aL0 + (fL - aL0) * u), rr = Math.round(aR0 + (fR - aR0) * u);
+      rect(l, ay + r, rr - l, 1, T(r < 2 ? '#a83a30' : '#c0443a'));
+      for (var q = 1; q < ribs; q++) rect(Math.round(l + (rr - l) * q / ribs), ay + r, 1, 1, T('#9a3028'));
+    }
+    rect(fL, ay + ad, fR - fL, 2, T('#7a2620')); rect(fL, ay + ad + 2, fR - fL, 1, 'rgba(44,26,18,0.3)');
+    if (glow > 0.05) for (var ix = fL; ix < fR; ix += 3) { var len = 1 + ((ix * 7) % 3); for (var k = 0; k < len; k++) rect(ix, ay + ad + 2 + k, 1, 1, k === len - 1 ? WARM : 'rgba(255,233,168,0.4)'); }
+    if (glow > 0.1) { glowDots(dx + dw / 2, base + 2, Math.round(dw * 0.9), WARM, glow * 0.35); for (var sp = 0; sp < 4; sp++) rect(dx - sp, base + sp, dw + sp * 2, 1, 'rgba(255,214,130,' + (0.28 * glow * (1 - sp / 4)).toFixed(2) + ')'); }   // light spilling out
+  }
+
+  function drawRoof(h, p) { // a low hip roof whose eaves overhang toward the viewer: we see the fascia and the underside
+    var x = h.x, w = h.w, L = x - 16, Rr = x + w + 16, ft = h.top + h.roofH - 3;
+    for (var r = 0; r < h.roofH - 3; r++) { var ins = Math.round((h.roofH - 3 - r) * 3.4); rect(L + ins, h.top + r, Rr - L - ins * 2, 1, T(r % 2 ? '#8a5444' : '#7a4a3c')); }
+    rect(L - 1, ft, Rr - L + 2, 3, T('#c0443a')); rect(L - 1, ft, Rr - L + 2, 1, T('#d8584a'));
+    for (r = 0; r < 4; r++) { var ins2 = Math.round(r * 13 / 3); rect(L + ins2, ft + 3 + r, Rr - L - ins2 * 2, 1, T(r === 0 ? '#5a3a30' : '#6a4a3e')); }
+    rect(x - 2, ft + 7, w + 4, 1, 'rgba(44,26,18,0.25)');
+  }
+
+  function drawSign(t, p) { // just the letters, floating, outlined so they read on any sky
+    var k = sign.k, pad = k + 2, x = sign.x + pad, y = sign.y + pad + (reduce ? 0 : Math.round(Math.sin(t * 0.0012))), glow = p.glow;
+    var sh = Math.max(1, k >> 1), o = Math.max(1, k >> 2);
+    for (var dx = -o; dx <= o; dx++) for (var dy = -o; dy <= o; dy++) if (dx || dy) { text('CHIBIRO', x + dx, y + dy, T(OUT), k); text('CHIBIRO', x + sh + dx, y + sh + dy, T(OUT), k); }
+    text('CHIBIRO', x + sh, y + sh, T('#b23a48'), k);
+    text('CHIBIRO', x, y, css(lerpC([253, 246, 227], [255, 233, 168], glow)), k);
+  }
+
+  /* ---------- Yard ---------- */
+  function drawGrounds(p) {
+    // grass on either side of the yard
+    rect(0, yardTop, W, yd, T('#8fae5a'));
+    for (var x = 0; x < W; x += 2) rect(x, yardTop + ((x * 13) % Math.max(1, yd - 1)), 1, 1, T('#6f8e3a'));
+    // the gravel path: a V that opens from the porch toward the curb, tinted for the time of day
+    // and warmed by the fairy lights after dark
+    var tint = p.tintA > 0.01 ? css(p.c.tint, p.tintA.toFixed(2)) : null, warm = p.glow > 0.05 ? 'rgba(255,190,110,' + (0.16 * p.glow).toFixed(2) + ')' : null, edge = T('#8a8272');
+    for (var y = yardTop; y < H; y++) {
+      var l = Math.max(0, edgeL(y)), r = Math.min(W, edgeR(y)), w = r - l;
+      if (w <= 0) continue;
+      ctx.drawImage(gravel, l, y - yardTop, w, 1, l, y, w, 1);
+      if (tint) rect(l, y, w, 1, tint);
+      if (warm) rect(l, y, w, 1, warm);
+      rect(l - 1, y, 2, 1, edge); rect(r - 1, y, 2, 1, edge);                                           // stone edging
+    }
+  }
+
+  function drawFences(p) {
+    // low boundary fences behind the grass: a white gate on the left, blue corrugated on the right
+    var gl = lot.l - 4, gy = yardTop + 1;
+    if (gl > 2) {
+      rect(0, gy - 9, gl, 1, T('#f2f0ea')); rect(0, gy - 1, gl, 1, T('#f2f0ea'));
+      for (var x = 1; x < gl; x += 2) rect(x, gy - 9, 1, 9, T('#e8e6e0'));
+      rect(gl - 4, gy - 12, 4, 12, T('#b8483a')); rect(gl - 5, gy - 13, 6, 1, T('#f2f0ea'));
+    }
+    var fl = lot.r + 4, fy = yardTop - 10;
+    if (fl < W - 2) { corrugated(fl, fy, W - fl, 11, '#8fb0cc', '#6f94b8'); rect(fl, fy, W - fl, 1, T('#5a7a98')); }
+  }
+
+  function drawTent(p) {
+    var t = tent, cx = t.x + t.w / 2, rx = t.w / 2, ry = t.h;
+    for (var y = 0; y < ry; y++) {
+      var hw = Math.round(rx * Math.sqrt(1 - Math.pow((ry - y) / ry, 2)));
+      rect(Math.round(cx - hw), t.base - ry + y, hw * 2, 1, T(y < 2 ? '#d8c09a' : '#c8aa80'));
+    }
+    var aw = Math.round(t.w * 0.26), ah = Math.round(ry * 0.72);                                    // two arched openings
+    [cx - aw - 2, cx + 2].forEach(function (ax) {
+      for (var y = 0; y < ah; y++) { var hw = Math.round((aw / 2) * Math.sqrt(1 - Math.pow((ah - y) / ah, 2))); rect(Math.round(ax + aw / 2 - hw), t.base - ah + y, hw * 2, 1, T('#5a4c3c')); }
+      if (p.glow > 0.2) rect(Math.round(ax + aw / 2 - 1), t.base - Math.round(ah * 0.5), 2, 2, lit(p.glow));
+    });
+    rect(Math.round(cx), t.base - ry, 1, ry, T('#a88a64')); rect(t.x, t.base - 1, t.w, 1, T('#8a7050'));
+    rect(t.x - 1, t.base - 3, 1, 3, T('#6a5a48')); rect(t.x + t.w, t.base - 3, 1, 3, T('#6a5a48'));
+  }
+
+  function drawChair(x, yb, face, p) { // folding camping chair, side view: X legs, sagging sling seat, armrest with cup holder, reclined back
+    var f = face, m = T('#4a4a52'), mesh = T('#26262c'), trim = T('#d0783a');
+    for (var k = 0; k < 6; k++) { rect(x - 4 * f + Math.round(k * 7 / 5) * f, yb - 1 - k, 1, 1, m); rect(x + 3 * f - Math.round(k * 7 / 5) * f, yb - 1 - k, 1, 1, m); }
+    rect(x + 3 * f, yb - 11, 1, 5, m);                                                                // front post up to the armrest
+    rect(f > 0 ? x - 4 : x - 3, yb - 7, 8, 1, mesh); rect(f > 0 ? x - 3 : x - 2, yb - 6, 6, 1, mesh); rect(f > 0 ? x - 4 : x - 3, yb - 7, 8, 1, trim);   // sling seat
+    rect(f > 0 ? x - 4 : x - 3, yb - 11, 8, 1, mesh); rect(f > 0 ? x + 4 : x - 5, yb - 12, 2, 1, m); rect(f > 0 ? x + 4 : x - 5, yb - 11, 2, 1, mesh);   // armrest + cup holder
+    for (var r = 0; r < 11; r++) {                                                                     // backrest leaning back
+      var bx = x - 4 * f - Math.floor(r / 3) * f;
+      rect(f > 0 ? bx - 1 : bx, yb - 8 - r, 2, 1, mesh); rect(f > 0 ? bx - 1 : bx + 1, yb - 8 - r, 1, 1, r === 10 ? trim : (r % 5 === 0 ? trim : mesh));
+    }
+    rect(f > 0 ? x - 8 : x + 6, yb - 19, 3, 1, trim);
+  }
+  function drawRollTable(x, yb, p) { // aluminium slat roll table with X legs, about 19px wide
+    rect(x - 9, yb - 12, 19, 2, T('#b4b8bc')); for (var i = x - 8; i < x + 10; i += 2) rect(i, yb - 12, 1, 2, T('#8a8e94'));
+    rect(x - 9, yb - 10, 19, 1, T('#6a6e74'));
+    for (var k = 0; k < 9; k++) {
+      var d = Math.round(k * 5 / 8);
+      rect(x - 7 + d, yb - 9 + k, 1, 1, T('#7a7e84')); rect(x - 2 - d, yb - 9 + k, 1, 1, T('#7a7e84'));
+      rect(x + 3 + d, yb - 9 + k, 1, 1, T('#7a7e84')); rect(x + 8 - d, yb - 9 + k, 1, 1, T('#7a7e84'));
+    }
+  }
+  function drawFurniture(f, p, t) {
+    var sx = f.kind === 'set' ? 14 : 6, faces = f.kind === 'set' ? [1, -1] : (f.flip ? [-1, 1] : [1, -1]);
+    for (var sd = 0; sd < 2; sd++) {
+      var x = f.x + (sd ? sx : -sx); drawChair(x, f.yb, faces[sd], p);
+      var q = f.who[sd]; if (!q) continue;
+      q.x = x; q.yb = f.yb; q.face = faces[sd];
+      q.sipping = !reduce && Math.sin(t * 0.0011 + q.ph) > 0.82;
+      var chat = f.who[0] && f.who[1] && !reduce && Math.floor(t / 2600 + f.seed) % 2 === sd;
+      drawPerson(q, t, { sip: q.sipping && !chat, mouth: chat && Math.floor(t / 200) % 2 === 0, gesture: chat && !q.sipping && Math.floor(t / 900) % 2 === 0, bubble: chat && Math.floor(t / 2600 + f.seed) % 4 < 2 && f.seed % 2 === 0 });
+    }
+    if (f.kind === 'set') {
+      drawRollTable(f.x, f.yb, p);
+      cup(f.x - 2, f.yb - 15);
+      for (sd = 0; sd < 2; sd++) if (f.who[sd] && !f.who[sd].sipping) cup(f.x + (sd ? 5 : -7), f.yb - 15);
+      if ((f.seed % 3 === 0) && p.glow > 0.1) { glowDots(f.x + 2, f.yb - 14, 6, WARM, p.glow * 0.5); rect(f.x + 1, f.yb - 16, 2, 4, '#ffd06c'); }
+    }
+  }
+  function drawStander(q, t, dt) {
+    var o = {};
+    if (q.pose === 'walk') {
+      var still = reduce;
+      if (!reduce && q.petUntil && t < q.petUntil) { o.bend = true; o.pat = Math.floor(t / 260) % 2; API.holding[q.petCat] = t + 250; still = true; }
+      else if (!reduce) {
+        if (q.petUntil) { q.petUntil = 0; q.face = -q.face; q.cool = t + 6000; }                    // done petting: stroll off the other way
+        var mv = q.v * dt / 1000, nx = q.x + q.face * mv, nb = wbox(q, nx + q.face * 2), cur = wbox(q, q.x), hc = -1, under = false;
+        API.cats.forEach(function (cb, ci) { if (!cb) return; if (overlap(cur, cb)) under = (cb[0] + cb[2]) / 2; else if (hc < 0 && overlap(nb, cb)) hc = ci; });
+        if (under !== false) { q.face = under > q.x ? -1 : 1; q.x += q.face * mv; q.dist += mv; }   // a cat ended up at their feet: step away from it
+        else if (hc >= 0) {
+          still = true;
+          var cb = API.cats[hc];
+          if (Math.abs(cb[3] - q.yb) <= 5 && t > (q.cool || 0)) { q.petUntil = t + 3200; q.petCat = hc; API.pets.push(hc); q.face = (cb[0] + cb[2]) / 2 > q.x ? 1 : -1; }   // right beside them: crouch and pet
+          else if (t > (q.turnCool || 0)) { q.face = -q.face; q.turnCool = t + 1500; }                                                  // otherwise step around it by heading back
+        } else { q.x = nx; q.dist += mv; }                                                           // (otherwise just wait for the cat to pass)
+        if (q.x > q.hi) { q.x = q.hi; q.face = -1; } if (q.x < q.lo) { q.x = q.lo; q.face = 1; }
+      }
+      o.step = still ? 0 : Math.floor(q.dist / 2.5) % 4; o.cup = q.cup && !o.bend;
+    } else if (q.talker != null) {
+      var turn = Math.floor(t / 2600) % 2 === q.talker && !reduce;
+      o.mouth = turn && Math.floor(t / 200) % 2 === 0; o.gesture = turn && Math.floor(t / 700) % 2 === 0;
+      o.bubble = turn && Math.floor(t / 2600) % 4 < 2; o.cup = q.cup && !o.gesture;
+    } else { o.sip = !reduce && Math.sin(t * 0.0009 + q.ph) > 0.8; o.cup = !o.sip; }
+    drawPerson(q, t, o);
+  }
+
+  /* ---------- Customers ---------- */
+  var SKIN = ['#f1c9a5', '#e2b48c', '#c98e62', '#a8724a', '#7e5236'], HAIR = ['#2a1a14', '#3e281c', '#1c1c22', '#6a4028', '#4a3a34'],
+      SHIRT = ['#e8d46a', '#5a8ac0', '#c05050', '#f2f0ea', '#6aa060', '#d08ab0', '#e08a3a', '#7a6ab0', '#3a8a8a'],
+      PANTS = ['#3a4a6a', '#2e2e34', '#6a5a48', '#5a6a8a', '#8a7a62'], STYLE = ['short', 'short', 'long', 'bun', 'cap'];
+  function pick(R, a) { return a[Math.floor(R() * a.length)]; }
+  function person(R, pose) {
+    return { pose: pose, skin: pick(R, SKIN), hair: pick(R, HAIR), style: pick(R, STYLE), shirt: pick(R, SHIRT), pants: pick(R, PANTS),
+             cap: pick(R, ['#c0443a', '#2e4a7a', '#e8d46a']), face: 1, ph: R() * 6.3 };
+  }
+  function cup(x, y) { rect(x, y, 2, 3, T('#fdf6e3')); rect(x, y, 2, 1, T('#6b4a3a')); }
+  // a little person about 25 art pixels tall, feet at (x, yb); pose is stand, walk or sit (on a chair facing `face`)
+  function drawPerson(o, t, opt) {
+    opt = opt || {};
+    var f = o.face, cx = Math.round(o.x), yb = o.yb, sit = o.pose === 'sit';
+    if (opt.bend) return drawCrouch(o, opt);
+    var hy = sit ? yb - 24 : yb - 25, by = hy + 7, hx = f > 0 ? cx - 2 : cx - 3, ex = f > 0 ? hx + 4 : hx + 1, fx = f > 0 ? cx + 2 : cx - 2;
+    var skin = T(o.skin), shirt = T(o.shirt), pants = T(o.pants), shoe = T('#2a2224'), dark = 'rgba(30,20,30,0.28)';
+    // legs
+    if (sit) {
+      rect(f > 0 ? cx - 2 : cx - 4, yb - 9, 7, 2, pants);
+      var sx = f > 0 ? cx + 3 : cx - 4; rect(sx, yb - 7, 2, 6, pants); rect(f > 0 ? sx : sx - 1, yb - 1, 3, 1, shoe);
+    } else {
+      var st = opt.step || 0;
+      for (var r = 0; r < 8; r++) {
+        var off = st % 2 && r >= 3 ? Math.min(2, Math.round((r - 2) / 2)) : 0, d = st === 1 ? 1 : -1;
+        rect(cx - 2 - f * d * off, yb - 9 + r, 2, 1, pants);
+        rect(cx + 1 + f * d * off, yb - 9 + r, 2, 1, pants);
+      }
+      var o1 = st % 2 ? -f * (st === 1 ? 1 : -1) * 2 : 0, o2 = -o1;
+      rect(cx - 2 + o1 + (f > 0 ? 0 : -1), yb - 1, 3, 1, shoe); rect(cx + 1 + o2 + (f > 0 ? 0 : -1), yb - 1, 3, 1, shoe);
+    }
+    // body
+    rect(cx - 2, by, 5, 9, shirt); rect(f > 0 ? cx - 2 : cx + 2, by, 1, 9, dark); rect(cx - 1, by, 3, 1, dark);
+    // head and hair
+    rect(hx, hy + 1, 6, 6, skin);
+    var hb = f > 0 ? hx : hx + 4, hc = T(o.hair);
+    rect(hx, hy, 6, 2, hc); rect(hb, hy + 2, 2, o.style === 'long' ? 8 : 3, hc);
+    if (o.style === 'bun') rect(f > 0 ? hx - 1 : hx + 5, hy - 1, 2, 2, hc);
+    if (o.style === 'cap') { rect(hx, hy - 1, 6, 2, T(o.cap)); rect(f > 0 ? hx + 6 : hx - 2, hy, 2, 1, T(o.cap)); }
+    rect(ex, hy + 3, 1, 1, T(OUT));
+    if (opt.mouth) rect(ex, hy + 5, 1, 1, T('#9a4a40'));
+    // front arm: resting, gesturing, holding a cup or sipping from it
+    var arm = T('#' + lerpC(rgb(o.shirt), [30, 20, 30], 0.25).map(function (v) { return (256 + v).toString(16).slice(1); }).join(''));
+    if (opt.sip) { rect(fx, by + 1, 1, 2, arm); rect(fx + f, by, 1, 1, skin); cup(f > 0 ? hx + 6 : hx - 2, hy + 4); }
+    else if (opt.cup) { rect(fx, by + 1, 1, 4, arm); rect(fx + f, by + 5, 1, 1, skin); cup(f > 0 ? fx + 2 : fx - 3, by + 3); }
+    else if (opt.gesture) { rect(fx, by + 1, 1, 2, arm); rect(fx + f, by + 3, 1, 1, arm); rect(fx + 2 * f, by + 2, 1, 1, skin); }
+    else if (!sit) { rect(fx, by + 1, 1, 6, arm); rect(fx, by + 7, 1, 1, skin); }
+    else { rect(fx, by + 1, 1, 4, arm); rect(fx + f, by + 5, 2, 1, arm); rect(fx + 3 * f, by + 5, 1, 1, skin); }
+    if (opt.bubble) {                                                                                    // a little "…" speech bubble
+      var bx = f > 0 ? hx + 4 : hx - 7, byy = hy - 7;
+      rect(bx, byy, 9, 5, T('#fffdf7')); rect(bx + (f > 0 ? 1 : 6), byy + 5, 2, 1, T('#fffdf7'));
+      for (var dd = 0; dd < 3; dd++) rect(bx + 2 + dd * 2, byy + 2, 1, 1, T('#6b4a3a'));
+    }
+  }
+
+  function drawCrouch(o, opt) { // squatting on one knee, leaning in and patting the cat in front of them
+    var f = o.face, cx = Math.round(o.x), yb = o.yb, skin = T(o.skin), shirt = T(o.shirt), pants = T(o.pants), shoe = T('#2a2224'), hc = T(o.hair);
+    rect(f > 0 ? cx - 3 : cx + 2, yb - 6, 2, 4, pants); rect(f > 0 ? cx - 6 : cx + 2, yb - 2, 5, 2, pants);              // back leg: knee down, shin along the ground
+    rect(f > 0 ? cx - 7 : cx + 6, yb - 2, 1, 2, shoe);
+    rect(f > 0 ? cx - 1 : cx - 3, yb - 7, 5, 2, pants); rect(f > 0 ? cx + 2 : cx - 3, yb - 5, 2, 4, pants);                 // front leg: thigh and shin
+    rect(f > 0 ? cx + 2 : cx - 4, yb - 1, 3, 1, shoe);
+    var by = yb - 13;
+    for (var r = 0; r < 7; r++) rect(cx - 2 + (r < 2 ? 2 * f : r < 4 ? f : 0), by + r, 5, 1, shirt);                     // body leaning in
+    var hx = (f > 0 ? cx - 1 : cx - 4) + 2 * f, hy = by - 6;
+    rect(hx, hy + 1, 6, 5, skin); rect(hx, hy, 6, 2, hc); rect(f > 0 ? hx : hx + 4, hy + 2, 2, o.style === 'long' ? 6 : 2, hc);
+    if (o.style === 'cap') { rect(hx, hy - 1, 6, 2, T(o.cap)); rect(f > 0 ? hx + 6 : hx - 2, hy, 2, 1, T(o.cap)); }
+    if (o.style === 'bun') rect(f > 0 ? hx - 1 : hx + 5, hy - 1, 2, 2, hc);
+    rect(f > 0 ? hx + 4 : hx + 1, hy + 4, 1, 1, T(OUT));                                                                 // eye, looking down at the cat
+    var pat = opt.pat || 0;
+    for (var k = 0; k < 4; k++) rect(cx + (3 + k) * f, by + 2 + Math.round(k * 0.75), 1, 1, shirt);                      // arm reaching out
+    rect(f > 0 ? cx + 7 : cx - 8, by + 4 + pat, 2, 1, skin);                                                              // hand, patting
+  }
+
+  function drawOpenStand(t, p) { // a neon OPEN sign on a little stand at the foot of the porch
+    var glow = p.glow, nW = 19, nH = 9, nX = openStand.x - 9, yb = openStand.yb, nY = yb - 18;
+    var flick = reduce || Math.sin(t * 0.0031) > -0.96 || Math.floor(t / 70) % 2 === 0, on = 0.55 + 0.45 * glow;
+    if (glow > 0.1 && flick) { glowDots(nX + nW / 2, nY + nH / 2, 12, '#ff6a9a', glow * 0.32); glowDots(openStand.x, yb, 8, '#ff6a9a', glow * 0.18); }
+    var leg = T('#4a4a52');
+    rect(nX + 3, nY + nH, 1, yb - nY - nH, leg); rect(nX + nW - 4, nY + nH, 1, yb - nY - nH, leg);              // stand legs
+    rect(nX + 1, yb - 1, 5, 1, leg); rect(nX + nW - 6, yb - 1, 5, 1, leg); rect(nX + 3, yb - 5, nW - 6, 1, leg);  // feet and crossbar
+    rect(nX, nY, nW, nH, T('#1e1822'));
+    var tube = flick ? css(lerpC(rgb('#c0507a'), rgb('#ff5aa8'), on)) : T('#5a3a4a'), txt = flick ? css(lerpC(rgb('#d06a40'), rgb('#ff9a5a'), on)) : T('#5a3a3a');
+    rect(nX, nY, nW, 1, tube); rect(nX, nY + nH - 1, nW, 1, tube); rect(nX, nY, 1, nH, tube); rect(nX + nW - 1, nY, 1, nH, tube);
+    text('OPEN', nX + 2, nY + 2, txt, 1);
+    rect(nX + 9, nY - 2, 1, 2, T('#2a2624'));                                                                     // power cord to the house
+  }
+
+  function drawPole(p) { rect(pole.x, pole.top, 1, pole.base - pole.top, T('#b8bcc0')); rect(pole.x + 1, pole.top, 1, pole.base - pole.top, T('#80848a')); rect(pole.x - 1, pole.base - 1, 4, 1, T('#5a5a5a')); }
+
+  function drawStrands(t, p) {
+    var on = p.glow > 0.05, wire = 'rgba(70,62,58,' + (0.3 + 0.3 * p.glow).toFixed(2) + ')';
+    strands.forEach(function (s, si) {
+      sag(s[0], s[1], s[2], s[3], s[4], function (x, y, i) {
+        if (i % 4 === 0) {
+          var tw = reduce ? 1 : 0.75 + 0.25 * Math.sin(t * 0.005 + i * 1.3 + si);
+          if (on) { if (p.glow > 0.5 && i % 8 === 0) { ctx.fillStyle = 'rgba(255,200,110,' + (0.18 * p.glow).toFixed(2) + ')'; ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); } rect(x, y, 1, 1, 'rgba(255,236,176,' + (0.35 + 0.65 * p.glow * tw).toFixed(2) + ')'); }
+          else rect(x, y, 1, 1, 'rgba(250,246,232,0.55)');
+        } else if (i % 2 === 0) rect(x, y, 1, 1, wire);
+      });
+    });
+  }
+
+  /* ---------- Frame ---------- */
+  var lastT = 0;
+  function draw(t) {
+    if (!W) return;
+    var f = phase(), p = mix(f), dt = Math.min(200, t - lastT || 16); lastT = t;
+    P_ = p; tintCache = {};
+    var horizon = yardTop - 2, span = Math.max(10, house.top - skyTop);
+    var sk = key4(SUN, f), mk = key4(MOON, f);
+    // on phones the house fills the width, so the sun sets at the right edge
+    var narrow = W < 300, sun = [(narrow ? sk[0] + 0.07 : sk[0]) * W, skyTop + sk[1] * (narrow ? 0.7 : 1) * (horizon - skyTop), sk[2]], moon = [mk[0] * W, skyTop + mk[1] * span, mk[2]];
+
+    drawSky(p, sun, moon);
+    if (p.stars > 0.02) for (var i = 0; i < stars.length; i++) {
+      var s = stars[i], tw = reduce ? 1 : 0.55 + 0.45 * Math.sin(t * 0.002 + s.ph);
+      ctx.globalAlpha = p.stars * tw; rect(s.x, s.y, 1, 1, '#fffdf7');
+      if (s.b) { ctx.globalAlpha *= 0.35; rect(s.x - 1, s.y, 3, 1, '#fffdf7'); rect(s.x, s.y - 1, 1, 3, '#fffdf7'); }
+    }
+    ctx.globalAlpha = 1;
+    var night = clamp((p.stars - 0.18) / 0.82, 0, 1); API.night = night;                                              // 0 at sunset, 1 at night: never both sun and moon
+    if (night < 0.99 && sun[1] < horizon + sun[2]) { ctx.globalAlpha = 1 - night; disc(sun[0], sun[1], sun[2], p.s.sun); disc(sun[0] - 1, sun[1] - 1, sun[2] - 2, css(lerpC(p.c.sun, [255, 253, 247], 0.4))); ctx.globalAlpha = 1; }
+    if (night > 0.01 && moon[1] < horizon + moon[2]) {
+      ctx.globalAlpha = night;
+      disc(moon[0], moon[1], moon[2], p.s.moon);
+      var mx = Math.round(moon[0]), my = Math.round(moon[1]);
+      rect(mx - 2, my - 1, 2, 2, p.s.moonShade); rect(mx + 1, my + 2, 2, 1, p.s.moonShade); rect(mx + 2, my - 3, 1, 1, p.s.moonShade);
+      ctx.globalAlpha = 1;
+    }
+    for (i = 0; i < clouds.length; i++) {
+      var cl = clouds[i];
+      if (!reduce) { cl.x += cl.v * dt / 1000; if (cl.x > W + 20) cl.x = -40; }
+      drawCloud(cl.x, cl.y, cl.s, p);
+    }
+    // backdrop: hazy hills, low shophouses, trees and the water tank
+    var hz = css(lerpC(lerpC(rgb('#9fb8c8'), p.c.skyLow, 0.35), p.c.tint, p.tintA * 0.8));
+    for (var x = 0; x < W; x++) rect(x, horizon - hills[x], 1, hills[x] + 2, hz);
+    shops.forEach(function (sh) {
+      var top = yardTop - sh.h; rect(sh.x, top, sh.w, sh.h, T(sh.col)); rect(sh.x, top, sh.w, 1, T('#a89a88'));
+      for (var wy = top + 3; wy < yardTop - 6; wy += 7) for (var wx = sh.x + 2; wx < sh.x + sh.w - 3; wx += 5) rect(wx, wy, 3, 3, p.glow > 0.4 && (sh.seed + wx + wy) % 4 === 0 ? lit(p.glow * 0.8) : T('#8a98a4'));
+    });
+    bgTrees.forEach(function (tr) { disc(tr.x, tr.y + 1, tr.r, T('#3a6624')); disc(tr.x - 1, tr.y, tr.r - 1, T('#4f8030')); rect(tr.x - 3, tr.y - tr.r + 3, 3, 1, T('#6a9a40')); rect(tr.x, tr.y + tr.r, 2, yardTop - tr.y - tr.r, T('#5a4a3a')); });
+    if (tower.x + 12 < W) {
+      var tb = yardTop - 2, tt = tower.top;
+      rect(tower.x, tt + 10, 1, tb - tt - 10, T('#a8acb0')); rect(tower.x + 9, tt + 10, 1, tb - tt - 10, T('#a8acb0'));
+      for (var ty = tt + 12; ty < tb; ty += 6) for (var q = 0; q < 6; q++) { rect(tower.x + 1 + q + (q > 3 ? 1 : 0), ty + q, 1, 1, T('#8a8e94')); rect(tower.x + 8 - q, ty + q, 1, 1, T('#8a8e94')); }
+      rect(tower.x - 1, tt, 12, 10, T('#c8ccd0')); rect(tower.x - 1, tt + 3, 12, 1, T('#a0a4a8')); rect(tower.x - 1, tt + 7, 12, 1, T('#a0a4a8')); rect(tower.x, tt - 1, 10, 1, T('#e0e2e4'));
+    }
+    // power lines and their pole
+    rect(3, wires[0].y1 - 2, 2, yardTop - wires[0].y1 + 2, T('#5c4a3a')); rect(0, wires[0].y1 - 1, 9, 1, T('#5c4a3a'));
+    wires.forEach(function (w) { sag(4, w.y1, W + 2, w.y2, w.sag, function (x, y) { rect(x, y, 1, 1, T('#2a2624')); }); });
+    // neighbours, grounds, fences, then the café
+    var haze = css(lerpC(p.c.skyLow, p.c.skyMid, 0.4), 0.42);
+    drawTwoStorey(nbL, p, -1, haze); drawTwoStorey(nbR, p, 1, haze);
+    drawGrounds(p);
+    drawFences(p);
+    drawHouse(t, p);
+    drawTent(p);
+    drawPole(p);
+    scene.forEach(function (it) { if (it.sign) drawOpenStand(t, p); else if (it.f) drawFurniture(it.f, p, t); else drawStander(it.q, t, dt); });
+    drawStrands(reduce ? 0 : t, p);
+    drawSign(reduce ? 0 : t, p);
+    if (p.birds > 0.05 && !reduce) {
+      ctx.globalAlpha = p.birds * (1 - p.stars);
+      birds.forEach(function (bd) {
+        bd.x += bd.v * dt / 1000; if (bd.x > W + 8) bd.x = -8;
+        var up = Math.floor(t / 180 + bd.ph) % 2, bx = Math.round(bd.x), by = Math.round(bd.y);
+        (up ? [[0, 0], [1, 1], [2, 2], [3, 1], [4, 0]] : [[0, 2], [1, 1], [2, 2], [3, 1], [4, 2]]).forEach(function (pt) { rect(bx + pt[0], by + pt[1], 1, 1, OUT); });
+      });
+      ctx.globalAlpha = 1;
+    }
+    if (p.stars > 0.3) flies.forEach(function (fl) {
+      var fx = Math.round(fl.x + (reduce ? 0 : Math.sin(t * 0.0007 + fl.ph) * 6)), fy = Math.round(fl.y + (reduce ? 0 : Math.sin(t * 0.0011 + fl.ph * 2) * 3));
+      ctx.globalAlpha = (p.stars - 0.3) / 0.7 * (reduce ? 0.8 : 0.5 + 0.5 * Math.sin(t * 0.004 + fl.ph));
+      rect(fx, fy, 1, 1, '#eaf78c'); ctx.globalAlpha = 1;
+    });
+
+    var now = Math.round(f) % NP;
+    if (hero.getAttribute('data-phase') !== String(now)) {
+      hero.setAttribute('data-phase', now);
+      if (label) label.textContent = NAMES[now];
+      if (btn) btn.setAttribute('aria-label', 'Time of day: ' + NAMES[now] + '. Change to ' + NAMES[(now + 1) % NP]);
+    }
+  }
+
+  var visible = true, last = 0, prevT = 0;
+  if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { visible = es[0].isIntersecting; }).observe(hero);
+  function loop(t) {
+    clock += Math.min(100, t - prevT || 0); prevT = t;
+    if (visible && t - last >= 66) { last = t; draw(t); }
+    requestAnimationFrame(loop);
+  }
+  if ('ResizeObserver' in window) { var ro = new ResizeObserver(resize); ro.observe(hero); if (copy) ro.observe(copy); }
+  else window.addEventListener('resize', resize);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(resize);
+  resize();
+  if (!reduce) requestAnimationFrame(loop);
+})();
