@@ -387,10 +387,18 @@
       c.width = c.height = 20; c.getContext('2d').drawImage(spr, 11, 0, 20, 20, 0, 0, 20, 20);
       return (heads[k] = c.toDataURL());
     }
-    var qrCache = { code: '', svg: '' };
+    var qrCache = { code: '', svg: '' }, qrLoading = false;
+    // qrcode.js is only fetched once a visitor has a card, so first-time visitors never download it
+    function loadQr() {
+      if (qrLoading) return; qrLoading = true;
+      var s = document.createElement('script'); s.src = 'qrcode.js';
+      s.onload = function () { var box = side.querySelector('.stamp-qr'); if (box && state.code) box.innerHTML = qrSvg(state.code); };
+      s.onerror = function () { qrLoading = false; };
+      document.head.appendChild(s);
+    }
     function qrSvg(code) {
       if (qrCache.code === code) return qrCache.svg;
-      if (typeof qrcode !== 'function') return '';
+      if (typeof qrcode !== 'function') { loadQr(); return ''; }
       var q = qrcode(0, 'M'); q.addData(cardLink(code)); q.make();
       qrCache = { code: code, svg: q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }).replace('<svg ', '<svg role="img" aria-label="Your stamp card QR code" ') };
       return qrCache.svg;
@@ -401,7 +409,7 @@
         '<span class="stamp-card__no"><span class="stamp-card__no-label">Member</span><span class="stamp-card__no-num">No.' + (c.member ? pad(c.member) : '----') + '</span></span></div><ol class="stamp-grid">';
       for (var i = 0; i < SIZE; i++) {
         var on = i < n, last = i === SIZE - 1, cls = 'stamp-slot' + (on ? ' is-stamped' : '') + (last && !on ? ' is-reward' : '') + (on && i === n - 1 ? ' is-new' : '') + (state.fresh.indexOf(i) >= 0 ? ' is-fresh' : '');
-        h += '<li class="' + cls + '" title="' + esc(CATNAMES[i]) + '"><img class="stamp-head" src="' + headURL(i) + '" alt="">' +
+        h += '<li class="' + cls + '" title="' + esc(CATNAMES[i]) + '"><img class="stamp-head" src="' + headURL(i) + '" alt="" width="20" height="20">' +
           (on ? '<span class="stamp-slot__date">' + esc(short(c.dates[i] || '')) + '</span>' : last ? '<span class="stamp-slot__free">Free<br>Drink</span>' : '<span class="stamp-slot__num">' + (i + 1) + '</span>') + '</li>';
       }
       h += '</ol><div class="stamp-card__foot"><div class="stamp-meter"><span style="width:' + (n / SIZE * 100) + '%"></span></div>';
