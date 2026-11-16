@@ -94,7 +94,7 @@
     var bw = clamp(Math.round(hh * 1.3), 80, bwMax);
     hh = Math.min(hh, Math.round(bw / 1.05));
     var spare = yardTop - (sy + s.h) - 10 - hh;                                  // narrow screens: the house is held back by the width,
-    if (spare > 16) { var add = Math.min(spare - 16, Math.round(H * 0.1)); yd += add; yardTop -= add; }   // so give the unused sky to the yard
+    if (spare > 16) { var add = Math.min(spare - 16, Math.round(H * 0.16)); yd += add; yardTop -= add; }   // so give the unused sky to the yard
     house = { x: Math.round(W / 2 - bw / 2), w: bw, h: hh, top: yardTop - hh };
     house.roofH = Math.max(7, Math.round(hh * 0.12));
     house.wallTop = house.top + house.roofH + 3;
@@ -129,11 +129,12 @@
     var small = W < 300;
     doorX = house.x + Math.round(house.w * 0.1) + 5;
     openStand = { x: doorX + 13, yb: yardTop + 4 };                             // on the porch slab, just right of the front door
-    var G, CG, Lu, Ru, rowY = [], topMin = yardTop + 10;
+    var G, CG, Lu, Ru, rowY = [], topMin = yardTop + 10, aisle = 0;
     function spacing(roomy) {                                                    // walkway half-width, walkway-to-set gap, gap between columns (set units);
       WH = roomy ? 10 : 7; G = roomy ? 6 : 3; CG = roomy ? 18 : 5;               // roomy leaves aisles wide enough to walk through
-      Lu = WH + G + 46; Ru = WH + G + 138 + 2 * CG;
+      Lu = WH + G + 46; Ru = WH + G + 138 + 2 * CG; aisle = roomy ? 0 : 1;   // compact (phones): no aisles between columns, so keep aisles between rows
     }
+    function minGap() { return aisle ? Math.ceil(17 * fitK) : 0; }               // room for a cat to walk between two rows
     function stack(e) {                                                          // rows from the bottom edge up, each set clear of the row behind
       var y3 = H - 2, y2 = Math.floor(y3 - 27 * sc(y3) - 1 - e), y1 = Math.floor(y2 - 27 * sc(y2) - 1 - e);
       return [y1, y2, y3];
@@ -143,11 +144,11 @@
       var kb = sc(H - 2); walkB = clamp(Math.round(W / 2 - (Ru - Lu) / 2 * kb), Math.ceil(6 + Lu * kb), Math.floor(W - 6 - Ru * kb));
       return rows.every(function (y) { var k = sc(y), xw = walkX(y); return xw - Lu * k >= 6 && xw + Ru * k <= W - 6; });   // the corner poles keep the edges
     }
-    function fit() { for (fitK = 1; fitK > 0.5; fitK -= 0.01) { rowY = stack(0); if (blockFits(rowY)) break; } return fitK; }
+    function fit() { for (fitK = 1; fitK > 0.5; fitK -= 0.01) { rowY = stack(minGap()); if (blockFits(rowY)) break; } return fitK; }
     spacing(false); var tight = fit(); spacing(true);
     if (fit() < tight - 0.08) { spacing(false); fit(); }                        // narrow phones: the compact spacing keeps everything bigger
     var slack = rowY[0] - 27 * sc(rowY[0]) - topMin;                             // spare depth (phones): open up the aisles between rows
-    for (var e = Math.floor(slack / 2); e > 0; e--) { var ry = stack(e); if (blockFits(ry)) { rowY = ry; break; } }
+    for (var e = minGap() + Math.floor(slack / 2); e > minGap(); e--) { var ry = stack(e); if (blockFits(ry)) { rowY = ry; break; } }
     blockFits(rowY);
     furn = []; people = [];
     var seatLeft = small ? 4 : 6;
@@ -205,8 +206,10 @@
     for (var j = 0; j < wr; j++) for (var i = 0; i < wc; i++) {
       var fx = i * WC + 1, fy = j * WC + 1;
       if (fy < yardTop + 7 || fy > H - 2 || fx < 5 || fx > W - 5) continue;
-      var fb = wbox(null, fx, fy); fb = [fb[0] - 1, fb[1], fb[2] + 1, fb[3] + 1];
-      wf[j * wc + i] = block.some(function (o) { return overlap(fb, o); }) ? 0 : 1;
+      // walkers are drawn in depth order, so a table in front of them covers them naturally: only their feet must stay off
+      // the ground under furniture and people (a 6px band at the base of each)
+      var k = sc(fy), ft = [fx - 4 * k - 1, fy - 2, fx + 4 * k + 1, fy + 2];
+      wf[j * wc + i] = block.some(function (o) { return overlap(ft, [o[0], o[3] - 6, o[2], o[3]]); }) ? 0 : 1;
     }
     var lab = new Int32Array(wf.length), best = 0, bestN = 0;                   // keep only the largest connected walkable area, so no one strolls into a dead-end pocket
     for (i = 0; i < wf.length; i++) if (wf[i] && !lab[i]) {
