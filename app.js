@@ -764,13 +764,14 @@
   /* ---------- HERO_YARD: a walkable grid over the scene, so cats go around tables, chairs and people ---------- */
   var G = null, CELL = 4;
   function hit(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
-  function catBox(x, y) { return [x - 7, y - 14, x + 7, y]; }                     // a cat's footprint in scene px, feet at (x, y)
+  var SCL = function () { return 1; };                                            // the scene's depth scale at a given y (smaller near the house)
+  function catBox(x, y) { var k = SCL(y); return [x - 7 * k, y - 14 * k, x + 7 * k, y]; }   // a cat's footprint in scene px, feet at (x, y)
   function buildGrid(info) {
     var cols = Math.ceil(info.W / CELL), rows = Math.ceil(info.H / CELL), free = new Uint8Array(cols * rows);
     for (var j = 0; j < rows; j++) for (var i = 0; i < cols; i++) {
       var fx = i * CELL + 2, fy = j * CELL + 2;
       if (fy < info.yardTop + 16 || fy > info.H - 2 || fx < 9 || fx > info.W - 9) continue;
-      var bx = [fx - 8, fy - 15, fx + 8, fy + 1], ok = true;
+      var ks = SCL(fy), bx = [fx - 8 * ks, fy - 15 * ks, fx + 8 * ks, fy + 1], ok = true;
       for (var k = 0; ok && k < info.statics.length; k++) if (hit(bx, info.statics[k])) ok = false;
       free[j * cols + i] = ok ? 1 : 0;
     }
@@ -843,11 +844,12 @@
 
     var SC = window.ChibiroScene, info = inHero && SC ? SC.info() : null, dts = dt * 16.7 / 1000;
     if (info && info.W) {
+      if (info.scale) SCL = info.scale;
       if (!G || G.ver !== info.ver) { G = buildGrid(info); yarn.ready = false; cats.forEach(function (c) { c.ready = false; }); }
-      var Rc = info.rect, Pp = info.P, ys = Math.round(s * 0.3), lead = cats[0];
+      var Rc = info.rect, Pp = info.P, lead = cats[0];
       cats.forEach(function (c) {                           // place (or re-place) each cat on a free spot in the yard
         if (c.ready) return;
-        var id = c.y < 0 ? -1 : nearestFree(cellAt((c.x + s / 2 - Rc.left) / Pp, (c.y + foot - Rc.top) / Pp));
+        var cs0 = c.size || s, id = c.y < 0 ? -1 : nearestFree(cellAt((c.x + cs0 / 2 - Rc.left) / Pp, (c.y + cs0 * 29.5 / 32 - Rc.top) / Pp));
         if (c.y < 0 || id < 0) { var fr = []; for (var k = 0; k < G.free.length; k++) if (G.free[k]) { var cp = centre(k); if (!info.walkers.some(function (w) { return hit(catBox(cp[0], cp[1]), [w[0] - 20, w[1], w[2] + 20, w[3] + 4]); }) && !cats.some(function (o) { return o !== c && o.ready && hit(catBox(cp[0], cp[1]), catBox(o.ax, o.ay)); })) fr.push(k); } id = fr.length ? fr[Math.floor(Math.random() * fr.length)] : 0; var cc = centre(id); c.ax = cc[0]; c.ay = cc[1]; c.path = []; }
         else { var here = centre(id); c.ax = here[0]; c.ay = here[1]; c.path = []; }
         c.dest = null; c.next = 0; c.ready = true; c.blocked = 0; c.yid = -1;
@@ -855,6 +857,7 @@
       if (!yarn.ready) { yarn.ax = lead.ax; yarn.ay = lead.ay; yarn.path = []; yarn.next = 0; yarn.ready = true; }
       if (!yarn.path.length && t > yarn.next) { if (wanderTo(yarn, [])) yarn.id++; yarn.next = t + 3500 + Math.random() * 3000; }
       stepAlong(yarn, 16, dts);
+      var ys = Math.round(s * 0.3 * SCL(yarn.ay));
       yarnEl.style.display = 'block';
       if (yarnEl._s !== ys) { yarnEl._s = ys; yarnEl.style.width = yarnEl.style.height = ys + 'px'; yarnEl.style.borderWidth = Math.max(2, Math.round(ys / 6)) + 'px'; }
       yarnEl.style.transform = 'translate3d(' + Math.round(Rc.left + yarn.ax * Pp - ys / 2) + 'px,' + Math.round(Rc.top + yarn.ay * Pp - ys) + 'px,0)';
@@ -863,7 +866,7 @@
     if (SC && SC.pets) while (SC.pets.length) { var pc = cats[SC.pets.shift()]; if (pc) petCat(pc, 3000); }
 
     cats.forEach(function (c) {
-      var tx, ox = c.x, moving = false;
+      var tx, ox = c.x, moving = false, cs = s;
       if (info && info.W && c.ready) {                    // IDLE_PLAY in the yard: wander in 2D, around furniture and people
         if (c.role === 'leader') { if (c.yid !== yarn.id && yarn.dest && !c.blocked) { c.yid = yarn.id; c.dest = yarn.dest; c.path = route(cellAt(c.ax, c.ay), cellAt(yarn.dest[0], yarn.dest[1])) || []; } }
         else if (c.role === 'sit') { if (!c.dest) wanderTo(c, cats); }
@@ -879,17 +882,24 @@
           var nx = c.ax + dx / d * 6 * dts, ny = c.ay + dy / d * 6 * dts;
           if (G.free[cellAt(nx, ny)] && !info.walkers.some(function (w) { return hit(catBox(nx, ny), w); })) { c.ax = nx; c.ay = ny; mv = Math.max(mv, 0.01); if (dx) c.face = dx > 0 ? 1 : -1; }
         });
+        if (!held) info.walkers.forEach(function (w) {           // a stroller ended up on top of this cat: ease out of their way
+          if (!hit(catBox(c.ax, c.ay), w)) return;
+          var dx = c.ax - (w[0] + w[2]) / 2, dy = c.ay - w[3], d = Math.sqrt(dx * dx + dy * dy) || 1;
+          var nx = c.ax + dx / d * 6 * dts, ny = c.ay + dy / d * 6 * dts;
+          if (G.free[cellAt(nx, ny)]) { c.ax = nx; c.ay = ny; mv = Math.max(mv, 0.01); if (Math.abs(dx) > 0.3) c.face = dx > 0 ? 1 : -1; }
+        });
         if (mv < 0) { c.blocked += dt * 16.7; if (c.blocked > 1500) { c.path = []; c.blocked = 0; c.yid = yarn.id; wanderTo(c, cats); } }   // give up and go somewhere else
         else c.blocked = 0;
         if (was && !c.path.length && c.role === 'wander') c.next = t + 2500 + Math.random() * 4000 * (1 + c.i * 0.3);
         moving = mv > 0;
         var cur = cellAt(c.ax, c.ay);
         if (!G.free[cur]) { var nf = nearestFree(cur); if (nf >= 0) { var cc2 = centre(nf); c.ax = cc2[0]; c.ay = cc2[1]; c.path = []; } }   // never rest on top of anything
-        c.x = Rc.left + c.ax * Pp - s / 2; c.y = Rc.top + c.ay * Pp - foot;
+        cs = Math.round(s * SCL(c.ay));                                     // nearer the house, smaller
+        c.x = Rc.left + c.ax * Pp - cs / 2; c.y = Rc.top + c.ay * Pp - cs * 29.5 / 32;
         catBoxes[c.i] = catBox(c.ax, c.ay);
         if (moving) {
           c.el.classList.toggle('cb-cat--flip', c.face < 0);
-          c.lastMove = t; c.walk = (c.walk + mv * Pp * 32 / s * 0.9 + 0.04 * dt) % 8;
+          c.lastMove = t; c.walk = (c.walk + mv * Pp * 32 / cs * 0.9 + 0.04 * dt) % 8;
         }
       } else {
       if (!playful) {                                   // Sleepy: docked bottom-right
@@ -913,7 +923,7 @@
         c.walk = (c.walk + Math.abs(c.x - ox) * 32 / s * 0.9 + 0.05 * dt) % 8;   // legs keep pace with the distance covered
       }
       }
-      if (s !== c.size) { c.size = s; c.el.style.width = c.el.style.height = s + 'px'; }
+      if (cs !== c.size) { c.size = cs; c.el.style.width = c.el.style.height = cs + 'px'; }
 
       // ears, blinks and tail
       if (t > c.earNext) { c.earUntil = t + 240; c.earSide = Math.random() < 0.5 ? 1 : 2; c.earNext = t + 1800 + Math.random() * 4500; }
