@@ -119,7 +119,7 @@
 }
 .cb-nav__brand { display: inline-flex; align-items: center; gap: var(--space-2); text-decoration: none; color: var(--roast);
   font-family: var(--font-display); font-size: 12px; line-height: 20px; text-transform: uppercase; }
-.cb-nav__brand img { width: var(--sprite-md); height: var(--sprite-md); }
+.cb-nav__brand img { display: block; width: 84px; height: 43px; }
 .cb-nav__links { display: flex; gap: var(--space-6); margin: 0 auto 0 0; padding: 0; list-style: none; }
 .cb-nav__links a {
   display: block; padding: var(--space-2) 0; color: var(--roast); text-decoration: none;
@@ -133,7 +133,7 @@
   .cb-nav { top: -40px; gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-4); }
   .cb-nav__tools { order: -1; width: 100%; flex-wrap: nowrap; justify-content: space-between; gap: var(--space-2); }
   .cb-nav__tools .cb-toggle__state { display: none; }
-  .cb-nav__brand img { width: var(--sprite-sm); height: var(--sprite-sm); }
+  .cb-nav__brand img { width: 55px; height: 28px; }
   .cb-nav__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .cb-nav__links { flex: 1; margin: 0; justify-content: space-between; gap: var(--space-2); }
 }
@@ -279,8 +279,10 @@ body { overflow-x: hidden; }
 .visit__links { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-6); }
 .alt { background: var(--parchment); border-top: var(--border-pixel) solid var(--roast); border-bottom: var(--border-pixel) solid var(--roast); }
 .alt .cb-perk { background: var(--cream); }
-.foot { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-8) var(--space-8) 88px; color: var(--cream); background: var(--roast); }
-.foot img { width: var(--sprite-md); height: var(--sprite-md); }
+.foot { padding: 0 0 var(--space-3); color: var(--cream); background: var(--roast); }
+.foot__row { display: flex; align-items: center; gap: var(--space-4); max-width: 960px; margin: 0 auto; padding: var(--space-3) var(--space-8) 0; }
+.foot p { font-size: 16px; line-height: 22px; }
+.foot__row img { flex: none; width: 63px; height: 32px; }
 .foot p { margin: 0; }
 #cats { position: fixed; inset: 0; z-index: var(--z-cats); pointer-events: none; overflow: hidden; }
 #cats .cb-cat { position: absolute; top: 0; left: 0; pointer-events: auto; will-change: transform; }
@@ -295,7 +297,6 @@ body { overflow-x: hidden; }
   .hero .cb-tag { white-space: normal; font-size: 8px; line-height: 12px; }
   .hero__stage { height: 96px; }
   .hero__sky { top: auto; bottom: var(--space-2); right: var(--space-4); padding: var(--space-1) var(--space-2); box-shadow: var(--shadow-hover); }
-  .foot { padding: var(--space-6) var(--space-4) 64px; }
 }
 
 /* Menu: Drinks / Snacks pages of 4×4 cards (2×4 on phones) */
@@ -334,3 +335,116 @@ body { overflow-x: hidden; }
 .menu-cat[aria-pressed="true"] { background: var(--strawberry); box-shadow: inset 0 -3px 0 rgba(44,26,18,0.25); }
 .menu-cat__n { opacity: 0.7; }
 .menu-grid .cb-item__head { flex-direction: column-reverse; align-items: flex-start; gap: var(--space-1); }
+
+/* ---------- Stamp card (design only, not wired up yet) ---------- */
+.stamps { display: grid; grid-template-columns: minmax(0, 460px) minmax(0, 1fr); gap: var(--space-12); align-items: center; }
+.stamp-card {
+  position: relative; padding: var(--space-6);
+  background: var(--cat-white); border: var(--border-pixel) solid var(--roast); box-shadow: var(--shadow-lift);
+  transform: rotate(-1.5deg);
+}
+.stamp-card::before { content: ""; position: absolute; inset: var(--space-2); border: var(--border-thin) dashed var(--parchment-deep); pointer-events: none; }
+.stamp-card__head { position: relative; display: flex; align-items: center; gap: var(--space-3);
+  padding-bottom: var(--space-4); margin-bottom: var(--space-4); border-bottom: var(--border-pixel) solid var(--roast); }
+.stamp-card__names { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; min-width: 0; }
+.stamp-card__brand { font-size: 16px; line-height: 20px; color: var(--roast-soft); }
+.stamp-card__title { font-family: var(--font-display); font-size: 14px; line-height: 20px; text-transform: uppercase; }
+.stamp-card__no { font-family: var(--font-display); font-size: 8px; line-height: 12px; text-align: right; color: var(--roast-soft);
+  padding: var(--space-1) var(--space-2); border: var(--border-thin) solid var(--roast-soft); }
+.stamp-grid { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.stamp-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; aspect-ratio: 1;
+  background: var(--cream); border: var(--border-thin) dashed var(--roast-soft); }
+.stamp-slot__num { font-family: var(--font-display); font-size: 12px; line-height: 16px; color: var(--parchment-deep); }
+.stamp-slot.is-stamped { border-style: solid; border-color: var(--parchment-deep); }
+.stamp-slot__date { position: absolute; bottom: 1px; left: 0; right: 0; text-align: center; font-size: 11px; line-height: 12px; color: var(--roast-soft); }
+.stamp-slot.is-new { border-color: var(--strawberry); box-shadow: 0 0 0 var(--border-thin) var(--strawberry); }
+.stamp-slot.is-new::after { content: "New"; position: absolute; top: -10px; right: -8px; padding: 2px 4px;
+  font-family: var(--font-display); font-size: 6px; line-height: 8px; text-transform: uppercase; color: var(--cream); background: var(--strawberry-deep); }
+.stamp-slot.is-reward { background: var(--matcha-foam); border: var(--border-thin) solid var(--matcha-deep); }
+.stamp-slot__free { font-family: var(--font-display); font-size: 7px; line-height: 11px; text-align: center; text-transform: uppercase; color: var(--matcha-deep); }
+.stamp-card__foot { position: relative; margin-top: var(--space-4); }
+.stamp-meter { height: 12px; background: var(--cream); border: var(--border-thin) solid var(--roast); }
+.stamp-meter span { display: block; height: 100%; background: repeating-linear-gradient(90deg, var(--strawberry) 0 8px, var(--strawberry-deep) 8px 10px); }
+.stamp-card__count { margin: var(--space-2) 0 0; font-size: 16px; line-height: 22px; color: var(--roast-soft); }
+.stamp-card__count b { font-family: var(--font-display); font-size: 10px; font-weight: 400; color: var(--roast); margin-right: var(--space-1); }
+.stamp-how { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-4); }
+.stamp-how__title { margin: 0; font-family: var(--font-display); font-size: 14px; line-height: 20px; font-weight: 400; text-transform: uppercase; }
+.stamp-steps { display: flex; flex-direction: column; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.stamp-steps li { display: flex; align-items: flex-start; gap: var(--space-3); }
+.stamp-steps__n { flex: none; width: 28px; height: 28px; display: grid; place-items: center;
+  font-family: var(--font-display); font-size: 10px; color: var(--cream); background: var(--roast); }
+.stamp-how__btn { opacity: 0.6; cursor: not-allowed; }
+.stamp-how__btn:hover, .stamp-how__btn:active { transform: none; box-shadow: inset 0 var(--space-1) 0 var(--strawberry-milk), var(--shadow-drop); }
+.stamp-how__note { margin: 0; font-size: 16px; line-height: 22px; color: var(--roast-soft); }
+@media (max-width: 767px) {
+  .stamps { grid-template-columns: minmax(0, 1fr); gap: var(--space-8); }
+  .stamp-card { padding: var(--space-4); transform: rotate(-1deg); }
+  .stamp-card::before { inset: var(--space-1); }
+  .stamp-grid { gap: var(--space-2); }
+  .stamp-card__title { font-size: 12px; }
+  .stamp-slot__date { font-size: 9px; line-height: 10px; }
+  .stamp-slot__free { font-size: 6px; line-height: 9px; }
+  .cb-nav__links a { font-size: 8px; }
+}
+.stamp-card__logo { display: block; width: 84px; height: 43px; }
+.stamp-card__names { gap: var(--space-2); }
+.cb-nav__links a { white-space: nowrap; }
+.cb-nav__narrow { display: none; }
+@media (max-width: 400px) { .cb-nav__wide { display: none; } .cb-nav__narrow { display: inline; } }
+
+/* stamp card: each stamp is one of the ten Chibiro cats */
+.stamp-head { width: 70%; height: auto; image-rendering: pixelated; margin-top: -10%; }
+.stamp-slot:not(.is-stamped) .stamp-head { filter: grayscale(1) brightness(1.15); opacity: 0.22; }
+.stamp-slot.is-stamped .stamp-head { transform: rotate(-6deg); }
+.stamp-slot.is-stamped:nth-child(2n) .stamp-head { transform: rotate(5deg); }
+.stamp-slot.is-stamped:nth-child(3n) .stamp-head { transform: rotate(-2deg); }
+.stamp-slot__num { position: absolute; top: 2px; left: 4px; font-size: 8px; line-height: 10px; }
+.stamp-slot.is-reward .stamp-head { opacity: 0.3; }
+.stamp-slot__free { position: absolute; bottom: 3px; left: 0; right: 0; }
+.stamp-card__no { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: var(--space-1) var(--space-2); color: var(--roast); background: var(--strawberry-milk); border: var(--border-thin) solid var(--roast); }
+.stamp-card__no-label { font-size: 6px; line-height: 8px; color: var(--roast-soft); text-transform: uppercase; }
+.stamp-card__no-num { font-size: 11px; line-height: 14px; }
+.stamp-card__exp { margin: 2px 0 0; font-size: 14px; line-height: 20px; color: var(--roast-soft); }
+.stamp-card__exp b { font-family: var(--font-display); font-size: 8px; font-weight: 400; color: var(--strawberry-deep); }
+
+  perspective: 520px; perspective-origin: 50% -40%; border-bottom: var(--border-pixel) solid #1a0f0a; border-top: var(--border-pixel) solid #1a0f0a; }
+  border-bottom: 4px solid #6b3e22; }
+  box-shadow: inset 0 -4px 0 #bfae8e; }
+  background: linear-gradient(90deg, #c9c2b8 2px, transparent 2px) 0 0 / 72px 72px, linear-gradient(#c9c2b8 2px, transparent 2px) 0 0 / 72px 72px, #ebe7e1; }
+@media (max-width: 767px) {
+}
+
+/* ---------- Footer yard: flat 2D gravel with three table sets, where five more cats live ---------- */
+.den { position: relative; height: 165px; margin: 0;
+  border-top: var(--border-pixel) solid #1a0f0a; overflow: hidden; }
+.den__yard { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.den__cats { position: absolute; inset: 0; }
+.den-cat { position: absolute; left: 0; top: 0; width: 48px; height: 48px; cursor: pointer; will-change: transform; }
+.den-cat canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; filter: brightness(0.82) saturate(0.85); }
+.den-cat.is-flip canvas { transform: scaleX(-1); }
+.den-cat.is-hop canvas { animation: cb-hop 0.36s steps(3, end); }
+.den-cat.is-flip.is-hop canvas { animation-name: cb-hop-flip; }
+@media (max-width: 767px) {
+  .den { height: 130px; }
+  .foot__row { padding: var(--space-2) var(--space-4) 0; gap: var(--space-3); }
+  .foot p { font-size: 13px; line-height: 18px; }
+  .den-cat { width: 32px; height: 32px; }
+}
+
+/* stamp card: live card bits */
+.stamp-card.is-sample { opacity: 0.92; }
+.stamp-wait { margin: var(--space-8) 0; text-align: center; color: var(--roast-soft); }
+.stamp-slot.is-fresh .stamp-head { animation: stamp-in 0.5s steps(4, end); }
+@keyframes stamp-in { 0% { transform: scale(2) rotate(-14deg); opacity: 0; } 60% { transform: scale(0.9) rotate(-6deg); opacity: 1; } 100% { transform: scale(1) rotate(-6deg); } }
+.stamp-demo { margin: 0; padding: var(--space-2) var(--space-3); font-size: 15px; line-height: 21px; background: var(--cream); border: var(--border-thin) dashed var(--roast-soft); }
+.stamp-msg { margin: 0; padding: var(--space-2) var(--space-3); font-size: 16px; line-height: 22px; font-weight: 700; border: var(--border-thin) solid var(--roast); background: var(--strawberry-milk); }
+.stamp-msg--ok { background: var(--matcha-foam); }
+.stamp-qr { width: 176px; padding: var(--space-2); background: var(--cat-white); border: var(--border-pixel) solid var(--roast); box-shadow: var(--shadow-drop); }
+.stamp-qr svg { display: block; width: 100%; height: auto; }
+.stamp-live { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: 15px; color: var(--matcha-deep); }
+.stamp-live__dot { width: 8px; height: 8px; background: var(--matcha); animation: stamp-blink 1.2s steps(2, end) infinite; }
+@keyframes stamp-blink { 50% { opacity: 0.2; } }
+.stamp-links { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.stamp-link { padding: 0; background: none; border: 0; cursor: pointer; font: inherit; font-size: 16px; color: var(--matcha-deep); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.stamp-small { margin: 0; font-size: 14px; line-height: 20px; color: var(--roast-soft); }
+@media (prefers-reduced-motion: reduce) { .stamp-slot.is-fresh .stamp-head, .stamp-live__dot { animation: none; } }

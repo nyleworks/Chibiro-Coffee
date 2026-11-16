@@ -180,6 +180,42 @@
       if (p === 'body') return (y > 2.4 && x > 1) ? L : B;
       if (p === 'tail') return Math.floor(k * 9) % 3 === 2 ? S : B;
       return B;
+    } },
+    // the five footer cats
+    { name: 'Black Cat', eye: '#e0c030', ears: 'up', col: function (p, x, y, k) {
+      var K = '#2a2226', K2 = '#463a40';
+      if (p === 'head') return y < -4.4 ? K2 : K;
+      if (p === 'body') return y < -3.4 ? K2 : K;
+      return K;
+    } },
+    { name: 'Tortoiseshell', eye: '#e0a030', ears: 'up', col: function (p, x, y, k) {
+      var K = '#3a2a24', O = '#c8742e', T = '#8a4a22', h = Math.round(x * 1.7 + y * 2.3 + k * 9);
+      var m = ((h % 5) + 5) % 5;
+      if (p === 'head') return x < -0.5 ? (m < 2 ? O : K) : (m === 0 ? O : K);
+      return m === 0 ? O : m === 1 ? T : K;
+    } },
+    { name: 'Grey Tabby', eye: '#6b8e23', ears: 'up', col: function (p, x, y, k) {
+      var G = '#9a9690', S = '#5e5a56', L = '#d6d2ca', rx = Math.round(x), ry = Math.round(y);
+      if (p === 'head') { if (y > 1.5 && Math.abs(x) < 3.2) return L; if (y < -2.5 && (rx === -2 || rx === 0 || rx === 2)) return S; return G; }
+      if (p === 'body') { if (y > 2.4 && x > 1) return L; if ((rx + 40) % 3 === 0) return S; return G; }
+      if (p === 'tail') return Math.floor(k * 9) % 2 ? S : G;
+      if (p === 'leg') return Math.floor(k * 5) % 2 ? S : G;
+      return G;
+    } },
+    { name: 'Snow', eye: '#4fa8e0', ears: 'up', col: function (p, x, y, k) {
+      var W = '#fffdf7', W2 = '#ece4d6';
+      if (p === 'head') return y > 3.4 ? W2 : W;
+      if (p === 'body') return y > 2 ? W2 : W;
+      return W;
+    } },
+    { name: 'Ginger & White', eye: '#9ac93a', ears: 'up', col: function (p, x, y, k) {
+      var G = '#e8943a', W = '#fffdf7';
+      if (p === 'head') return (y > 0.5 && Math.abs(x) < 3.6) || (Math.abs(x + 0.3) < 1 && y > -3) ? W : G;
+      if (p === 'ear') return G;
+      if (p === 'body') return (x > 1.5 && y > -2) || y > 2.6 ? W : G;
+      if (p === 'leg') return W;
+      if (p === 'tail') return k > 0.8 ? W : G;
+      return G;
     } }
   ];
 
@@ -261,6 +297,427 @@
     for (i = 0; i < 1024; i++) if (g[i]) { cx.fillStyle = g[i]; cx.fillRect(i % 32, i >> 5, 1, 1); }
     return c;
   }
+
+  /* ---------- Cat Stamp Card ----------
+     The card lives on the customer's phone as a random code (no sign-up, no personal details) and shows as a
+     QR code. Staff scan it with the café phone, which opens the staff page of the Google Apps Script (signed
+     in to the Chibiro Google account) to add a stamp or give the free drink. This page polls the sheet so new
+     stamps appear live. Backend and setup: apps-script/Code.gs and the setup guide.
+     Paste the two web app links (both end in /exec) here. While STAMP_API is empty the card runs in a
+     preview mode that only lives in this browser, so the design can be tried out. */
+  var STAMP_API = 'https://script.google.com/macros/s/AKfycbwR8Z7vlQEVyXehefGOcjkERVbE7l9H5FrJ0IwzMyVmkzl7V-aPuUicSdaz9dba1ZXx/exec';     // public deployment ("Who has access: Anyone"): looks up a card's stamps
+  var STAMP_STAFF = 'https://script.google.com/macros/s/AKfycbzCwCftbNpsDwIqmo1EqXWAJ1WeKWnyd1YudxPhTHwZ08Os7h2pCUfgBEONVk77mDHw/exec';   // staff deployment ("Who has access: Only myself"): the staff page
+  (function () {
+    var cardEl = document.getElementById('stampCard'), side = document.getElementById('stampSide'); if (!cardEl || !side) return;
+    var SIZE = 10, CARD_KEY = 'chibiro-card', STAFF_KEY = 'chibiro-staff-phone', DEMO_KEY = 'chibiro-card-demo', TZ = 'Asia/Kuching';
+    var CATNAMES = ['Calico', 'Orange Tabby', 'Siamese', 'Tuxedo', 'Scottish Fold', 'Black Cat', 'Tortoiseshell', 'Grey Tabby', 'Snow', 'Ginger & White'];
+    var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var demo = !STAMP_API;
+    function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } }
+    function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+    function validCode(c) { return typeof c === 'string' && /^[A-Za-z0-9_-]{22}$/.test(c); }
+    function esc(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    function pad(n) { return ('000' + n).slice(-4); }
+    function newCode() { var b = new Uint8Array(16); crypto.getRandomValues(b); return btoa(String.fromCharCode.apply(null, b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+    function cardLink(code) { return location.origin + location.pathname + '#card=' + code; }
+    function short(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + ' ' + MON[+p[1] - 1] : ''; }
+    function longDate(iso) { try { return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ }).format(new Date(iso)); } catch (e) { return String(iso).slice(0, 10); } }
+    function todayIso() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
+
+    // ---- arriving from a scanned QR code (#card=…) or the café phone set-up link (#staff-phone=on|off) ----
+    var hash = new URLSearchParams(location.hash.slice(1)), query = new URLSearchParams(location.search);
+    var scanned = hash.get('card') || query.get('card'), staffSetting = hash.get('staff-phone');
+    if (validCode(scanned) && STAMP_STAFF && load(STAFF_KEY) === '1') { location.replace(STAMP_STAFF + '?card=' + encodeURIComponent(scanned)); return; }
+
+    var state = { code: load(CARD_KEY), card: null, msg: null, fresh: [], error: false, paused: false };
+    if (!validCode(state.code)) state.code = null;
+
+    // ---- talking to the sheet (or the in-browser preview) ----
+    function demoCard() {
+      var d = null; try { d = JSON.parse(load(DEMO_KEY) || 'null'); } catch (e) { d = null; }
+      d = d || { member: 0, stamps: 0, dates: [], freeDrinks: 0 };
+      var last = d.dates[d.dates.length - 1], exp = null;
+      if (d.stamps > 0 && d.stamps < SIZE && last) { var x = new Date(last + 'T23:59:59+08:00'); x.setMonth(x.getMonth() + 1); exp = x.toISOString(); }
+      return { member: d.member, stamps: d.stamps, size: SIZE, dates: d.dates, expires: exp, stampedToday: false, freeDrinks: d.freeDrinks };
+    }
+    function demoStamp() {
+      var c = demoCard();
+      if (c.stamps >= SIZE) { c.stamps = 0; c.dates = []; c.freeDrinks += 1; state.msg = { text: 'Free drink given (preview). A new card has started.', ok: true }; }
+      else { if (!c.member) c.member = 308; c.stamps += 1; c.dates = c.dates.concat([todayIso()]); }
+      store(DEMO_KEY, JSON.stringify({ member: c.member, stamps: c.stamps, dates: c.dates, freeDrinks: c.freeDrinks }));
+      return demoCard();
+    }
+    function fetchCard() {
+      if (!state.code) return Promise.resolve(null);
+      if (demo) return Promise.resolve(demoCard());
+      // A plain-text POST keeps this a "simple" request, which Apps Script web apps accept from any site
+      return fetch(STAMP_API, { method: 'POST', body: JSON.stringify({ action: 'card', card: state.code }), redirect: 'follow' })
+        .then(function (r) { return r.json(); }).then(function (r) { return r && r.ok ? r.card : null; }).catch(function () { return null; });
+    }
+    function apply(card) {
+      if (!card) { state.error = true; return true; }
+      var before = state.card, changed = !before || state.error || before.stamps !== card.stamps || before.freeDrinks !== card.freeDrinks || before.member !== card.member;
+      state.error = false;
+      if (before) {
+        if (card.freeDrinks > before.freeDrinks) state.msg = { text: 'Enjoy your free drink! A new card has started.', ok: true };
+        else if (card.stamps > before.stamps) {
+          state.fresh = []; for (var i = before.stamps; i < card.stamps; i++) state.fresh.push(i);
+          state.msg = { text: 'New cat stamp: ' + CATNAMES[card.stamps - 1] + '! ' + card.stamps + ' of ' + SIZE + '.' + (!before.member && card.member ? ' Welcome, member No.' + pad(card.member) + '!' : ''), ok: true };
+        }
+      }
+      state.card = card;
+      return changed;
+    }
+
+    // ---- drawing ----
+    var heads = {};
+    function headURL(k) {
+      if (heads[k]) return heads[k];
+      var spr = drawCat(BREEDS[k], { pose: 'sit', step: 0, tail: 0, ear: 0, eyes: 'open' }), c = document.createElement('canvas');
+      c.width = c.height = 20; c.getContext('2d').drawImage(spr, 11, 0, 20, 20, 0, 0, 20, 20);
+      return (heads[k] = c.toDataURL());
+    }
+    var qrCache = { code: '', svg: '' };
+    function qrSvg(code) {
+      if (qrCache.code === code) return qrCache.svg;
+      if (typeof qrcode !== 'function') return '';
+      var q = qrcode(0, 'M'); q.addData(cardLink(code)); q.make();
+      qrCache = { code: code, svg: q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }).replace('<svg ', '<svg role="img" aria-label="Your stamp card QR code" ') };
+      return qrCache.svg;
+    }
+    function cardHTML(c, sample) {
+      var n = c.stamps, h = '<div class="stamp-card__head"><div class="stamp-card__names">' +
+        '<img class="stamp-card__logo" src="' + esc(LOGO) + '" alt="Chibiro Coffee" width="84" height="43"><span class="stamp-card__title">Stamp Card</span></div>' +
+        '<span class="stamp-card__no"><span class="stamp-card__no-label">Member</span><span class="stamp-card__no-num">No.' + (c.member ? pad(c.member) : '----') + '</span></span></div><ol class="stamp-grid">';
+      for (var i = 0; i < SIZE; i++) {
+        var on = i < n, last = i === SIZE - 1, cls = 'stamp-slot' + (on ? ' is-stamped' : '') + (last && !on ? ' is-reward' : '') + (on && i === n - 1 ? ' is-new' : '') + (state.fresh.indexOf(i) >= 0 ? ' is-fresh' : '');
+        h += '<li class="' + cls + '" title="' + esc(CATNAMES[i]) + '"><img class="stamp-head" src="' + headURL(i) + '" alt="">' +
+          (on ? '<span class="stamp-slot__date">' + esc(short(c.dates[i] || '')) + '</span>' : last ? '<span class="stamp-slot__free">Free<br>Drink</span>' : '<span class="stamp-slot__num">' + (i + 1) + '</span>') + '</li>';
+      }
+      h += '</ol><div class="stamp-card__foot"><div class="stamp-meter"><span style="width:' + (n / SIZE * 100) + '%"></span></div>';
+      h += '<p class="stamp-card__count"><b>' + n + '/' + SIZE + '</b> · ' + (n >= SIZE ? 'your free drink is ready!' : (SIZE - n) + ' more cat' + (SIZE - n > 1 ? 's' : '') + ' to a free drink') + '</p>';
+      if (c.expires) h += '<p class="stamp-card__exp">Expires <b>' + esc(longDate(c.expires)) + '</b> · one month after the last stamp</p>';
+      else if (n >= SIZE) h += '<p class="stamp-card__exp">Show your QR code at the counter to claim it.</p>';
+      else h += '<p class="stamp-card__exp">' + (sample ? 'Sample card' : 'A card expires one month after its last stamp') + '</p>';
+      return h + '</div>';
+    }
+    var LOGO = (document.querySelector('.cb-nav__brand img') || {}).src || '';
+    var SAMPLE = { member: 308, stamps: 6, dates: ['2026-11-03', '2026-11-05', '2026-11-07', '2026-11-10', '2026-11-12', '2026-11-16'], expires: '2026-12-16T15:59:59Z', freeDrinks: 0 };
+    var sideHTML = side.innerHTML;
+    function render() {
+      if (!state.code) {                                  // no card yet: the sample card and how it works
+        cardEl.innerHTML = cardHTML(SAMPLE, true); cardEl.classList.add('is-sample');
+        if (side.dataset.mode !== 'intro') { side.innerHTML = sideHTML; side.dataset.mode = 'intro'; }
+        return;
+      }
+      cardEl.classList.remove('is-sample');
+      var c = state.card;
+      cardEl.innerHTML = c ? cardHTML(c) : '<p class="stamp-wait">' + (state.error ? 'Couldn\'t check your card. Check your internet and try again.' : 'Loading your card…') + '</p>';
+      var h = '<h3 class="stamp-how__title">Your card</h3>';
+      if (demo) h += '<p class="stamp-demo"><b>Preview mode.</b> Not linked to the Google Sheet yet, so this card only lives in this browser. Tap the button under the QR code to see a stamp land.</p>';
+      if (state.msg) h += '<p class="stamp-msg' + (state.msg.ok ? ' stamp-msg--ok' : '') + '" role="status">' + esc(state.msg.text) + '</p>';
+      h += '<div class="stamp-qr">' + qrSvg(state.code) + '</div>';
+      h += '<p class="stamp-how__note">After you order, show this QR code at the counter and we\'ll stamp it. One stamp a visit, one visit a day.</p>';
+      if (c && c.stampedToday && c.stamps < SIZE) h += '<p class="stamp-how__note"><b>Today\'s cat is collected.</b> See you again soon!</p>';
+      if (demo) h += '<button class="cb-btn cb-btn--plain" type="button" data-stamp="demo">' + (c && c.stamps >= SIZE ? 'Preview: give the free drink' : 'Preview: add a stamp') + '</button>';
+      else h += state.paused || state.error ? '<button class="stamp-link" type="button" data-stamp="check">Check for stamps</button>' : '<p class="stamp-live"><span class="stamp-live__dot" aria-hidden="true"></span>Live: new stamps appear here</p>';
+      h += '<p class="stamp-small">Keep a screenshot of this card. If your phone ever loses it, scan the screenshot with your camera to bring it back.</p>' +
+        '<div class="stamp-links"><button class="stamp-link" type="button" data-stamp="copy">Copy my card link</button><button class="stamp-link" type="button" data-stamp="paste">Paste a card link</button></div>' +
+        '<p class="stamp-small">No sign-up. We don\'t ask for your name or phone number.</p>';
+      side.innerHTML = h; side.dataset.mode = 'card';
+      state.fresh = [];
+    }
+
+    // ---- live updates while the stamp card is on screen ----
+    var poll = { timer: 0, until: 0, busy: false }, onScreen = false;
+    function startLive() { poll.until = Date.now() + 3 * 60000; if (state.paused) { state.paused = false; render(); } clearTimeout(poll.timer); check(); }
+    function check() {
+      if (poll.busy || !state.code) return; poll.busy = true;
+      fetchCard().then(function (card) {
+        poll.busy = false; if (apply(card)) render(); clearTimeout(poll.timer);
+        if (demo || !onScreen || document.hidden) return;
+        if (Date.now() > poll.until) { state.paused = true; render(); return; }
+        poll.timer = setTimeout(check, 3000);
+      });
+    }
+    if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { var was = onScreen; onScreen = es[0].isIntersecting; if (onScreen && !was && state.code) startLive(); }).observe(cardEl);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && onScreen && state.code) startLive(); });
+
+    function say(text, ok) { state.msg = { text: text, ok: ok }; render(); }
+    document.getElementById('stamps').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-stamp]'); if (!b) return;
+      var act = b.dataset.stamp;
+      if (act === 'get') { state.code = newCode(); store(CARD_KEY, state.code); state.card = null; state.msg = { text: 'Your card is ready! Show the QR code when you order.', ok: true }; render(); startLive(); }
+      else if (act === 'check') { state.msg = null; startLive(); }
+      else if (act === 'demo') { var before = state.card; state.card = before; apply(demoStamp()); render(); }
+      else if (act === 'copy') {
+        var link = cardLink(state.code);
+        (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(link) : Promise.reject())
+          .then(function () { say('Card link copied. Keep it somewhere safe.', true); }, function () { window.prompt('Copy your card link:', link); });
+      } else if (act === 'paste') {
+        var use = function (text) {
+          var m = /card=([A-Za-z0-9_-]{22})/.exec(text || '');
+          if (!m) { say('That isn\'t a card link. Open your card in the other browser and tap “Copy my card link” first.', false); return; }
+          state.code = m[1]; store(CARD_KEY, m[1]); state.card = null; say('Your card is back on this phone.', true); startLive();
+        };
+        if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(use, function () { use(window.prompt('Paste your card link here:')); });
+        else use(window.prompt('Paste your card link here:'));
+      }
+    });
+
+    // ---- start ----
+    if (scanned || staffSetting) { query.delete('card'); var qs = query.toString(); history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + '#stamps'); }
+    if (staffSetting === 'on' || staffSetting === 'off') {
+      store(STAFF_KEY, staffSetting === 'on' ? '1' : null);
+      state.msg = { text: staffSetting === 'on' ? 'This phone is now the café phone. Scanning a customer\'s card will open the staff page.' : 'This phone is no longer the café phone.', ok: true };
+      if (!state.code) state.code = newCode(), store(CARD_KEY, state.code);
+    } else if (validCode(scanned) && scanned !== state.code) {
+      state.code = scanned; store(CARD_KEY, scanned); state.card = null; state.msg = { text: 'Your card is back on this phone.', ok: true };
+    }
+    render();
+    if (state.code) fetchCard().then(function (card) { if (apply(card)) render(); });
+    if (scanned || staffSetting) setTimeout(function () { document.getElementById('stamps').scrollIntoView(); }, 300);
+  })();
+
+  /* ---------- Footer yard: flat 2D gravel with three table sets (as in the hero); five more cats wander between them ---------- */
+  (function () {
+    var cv = document.getElementById('denYard'), box = document.getElementById('denCats'); if (!cv || !box) return;
+    var den = cv.parentNode, out = cv.getContext('2d'), bg = document.createElement('canvas'), g = out, P = 3, W = 0, H = 0, sets = [], blocks = [];
+    function rect(x, y, w, h, c) { g.fillStyle = c; g.fillRect(x, y, w, h); }
+    function chair(x, yb, f) {                            // same folding camping chair as the hero, side view
+      var m = '#4a4a52', mesh = '#26262c', trim = '#d0783a';
+      for (var k = 0; k < 6; k++) { rect(x - 4 * f + Math.round(k * 7 / 5) * f, yb - 1 - k, 1, 1, m); rect(x + 3 * f - Math.round(k * 7 / 5) * f, yb - 1 - k, 1, 1, m); }
+      rect(x + 3 * f, yb - 11, 1, 5, m);
+      rect(f > 0 ? x - 4 : x - 3, yb - 7, 8, 1, mesh); rect(f > 0 ? x - 3 : x - 2, yb - 6, 6, 1, mesh); rect(f > 0 ? x - 4 : x - 3, yb - 7, 8, 1, trim);
+      rect(f > 0 ? x - 4 : x - 3, yb - 11, 8, 1, mesh); rect(f > 0 ? x + 4 : x - 5, yb - 12, 2, 1, m); rect(f > 0 ? x + 4 : x - 5, yb - 11, 2, 1, mesh);
+      for (var r = 0; r < 11; r++) { var bx = x - 4 * f - Math.floor(r / 3) * f; rect(f > 0 ? bx - 1 : bx, yb - 8 - r, 2, 1, mesh); rect(f > 0 ? bx - 1 : bx + 1, yb - 8 - r, 1, 1, r % 5 === 0 ? trim : mesh); }
+      rect(f > 0 ? x - 8 : x + 6, yb - 19, 3, 1, trim);
+    }
+    function table(x, yb) {                               // same aluminium roll table as the hero
+      rect(x - 9, yb - 12, 19, 2, '#b4b8bc'); for (var i = x - 8; i < x + 10; i += 2) rect(i, yb - 12, 1, 2, '#8a8e94');
+      rect(x - 9, yb - 10, 19, 1, '#6a6e74');
+      for (var k = 0; k < 9; k++) { var d = Math.round(k * 5 / 8); rect(x - 7 + d, yb - 9 + k, 1, 1, '#7a7e84'); rect(x - 2 - d, yb - 9 + k, 1, 1, '#7a7e84'); rect(x + 3 + d, yb - 9 + k, 1, 1, '#7a7e84'); rect(x + 8 - d, yb - 9 + k, 1, 1, '#7a7e84'); }
+      rect(x - 2, yb - 14, 2, 2, '#fdf6e3'); rect(x + 3, yb - 14, 2, 2, '#e57373');   // two cups on top
+    }
+    var GY = 0;                                           // the grass edge: everything stands along this line, seen from the side
+    function layout() {
+      P = window.innerWidth < 768 ? 2 : 3;
+      W = Math.max(1, Math.round(den.clientWidth / P)); H = Math.max(1, Math.round(den.clientHeight / P));
+      cv.width = W; cv.height = H; bg.width = W; bg.height = H; g = bg.getContext('2d');
+      var seed = 7; function R() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+      GY = Math.round(H * 0.44);
+      // night sky, a few stars
+      for (var y = 0; y < GY; y++) rect(0, y, W, 1, y < GY * 0.5 ? '#1a1310' : '#221a14');
+      for (var k = 0; k < W / 40; k++) rect(Math.floor(R() * W), Math.floor(R() * GY * 0.45), 1, 1, '#c8c0b0');
+      // two rows of tropical trees: soft round crowns, plus a coconut palm now and then
+      function crown(cx, top, r, c) { for (var yy = -r; yy <= r; yy++) { var w = Math.round(Math.sqrt(r * r - yy * yy) * 1.15); rect(cx - w, top + r + yy, w * 2 + 1, 1, c); } }
+      [['#1d2a1c', 0.62, Math.max(3, Math.round(GY * 0.16))], ['#24361f', 0.8, Math.max(2, Math.round(GY * 0.11))]].forEach(function (row, ri) {
+        for (var x = -6; x < W + 10; x += row[2] * 2 + Math.floor(R() * 6)) {
+          var r = row[2] + Math.floor(R() * 3), top = Math.round(GY * row[1]) - r - Math.floor(R() * 3);
+          crown(x, top, r, row[0]); rect(x, top + r * 2, 2, GY - top - r * 2, row[0]);
+        }
+        if (ri === 0) for (var pz = 0; pz < 2; pz++) {                  // palms
+          var px = Math.round(W * (0.12 + pz * 0.66) + R() * 12), pt = Math.round(GY * 0.22);
+          for (var yy = pt; yy < GY; yy++) rect(px + Math.round((yy - pt) * 0.08), yy, 2, 1, '#2a2418');
+          [[-1, 0], [1, 0], [-1, 1], [1, 1], [0, -1]].forEach(function (d) { for (var f = 0; f < 9; f++) rect(px + d[0] * f, pt + Math.round(f * f * 0.08) + d[1] * 2 - (d[1] < 0 ? f / 2 : 0), 2, 1, '#22301c'); });
+        }
+      });
+      // grass edge, then the gravel lane down to the bottom
+      for (x = 0; x < W; x++) { var gh = 2 + ((x * 7 + (x >> 2)) % 3 === 0 ? 2 : 0); rect(x, GY - gh, 1, gh, x % 3 ? '#3f5a2a' : '#4f6e32'); }
+      rect(0, GY, W, 2, '#3f5a2a');
+      var tones = ['#6e6658', '#625a4e', '#7a7264', '#575045', '#686052'];
+      rect(0, GY + 2, W, H - GY - 2, tones[0]);
+      for (y = GY + 2; y < H; y++) for (x = 0; x < W; x++) { var v = R(); if (v < 0.45) rect(x, y, 1, 1, tones[1 + Math.floor(v * 8.8) % 4]); }
+      // three table sets along the lane, each with a little lantern glowing on the table
+      var step = W / 3;
+      sets = [0, 1, 2].map(function (k) { return { x: Math.round(step * (k + 0.5) + (k === 1 ? 6 : 0)), yb: GY + 8 }; });
+      sets.forEach(function (s) {
+        var gr = g.createRadialGradient(s.x * 1, s.yb - 14, 1, s.x, s.yb - 10, 30);
+        gr.addColorStop(0, 'rgba(255,190,110,0.42)'); gr.addColorStop(1, 'rgba(255,190,110,0)');
+        g.fillStyle = gr; g.fillRect(s.x - 32, s.yb - 44, 64, 60);
+      });
+      sets.forEach(function (s) { chair(s.x - 14, s.yb, 1); chair(s.x + 14, s.yb, -1); });
+      g = out;
+      people(); paint(performance.now());
+      // cats may walk the lane in front of a set only where their whole body clears it
+      blocks = sets.map(function (s) { return [s.x - 23, s.yb - 21, s.x + 23, s.yb + 16]; });
+      stand.x = Math.max(8, Math.round(sets[0].x - 30)); stand.yb = H - 3;
+      if (stand.x + 6 > sets[0].x - 23) stand.x = 7;
+      blocks.push([stand.x - 7, stand.yb - 26, stand.x + 7, stand.yb + 14]);
+      dc.forEach(function (c) { if (!free(c, c.x, c.y)) place(c); });
+      if (walker && !wFree(walker.x, walker.yb)) wPlace();
+    }
+
+    // ----- customers: two chatting at a table, one standing on the left sipping, one strolling who stops to pet the cats
+    function cup(x, y) { rect(x, y, 2, 3, ('#fdf6e3')); rect(x, y, 2, 1, ('#6b4a3a')); }
+    // a little person about 25 art pixels tall, feet at (x, yb); pose is stand, walk or sit (on a chair facing `face`)
+    function drawPerson(o, t, opt) {
+      opt = opt || {};
+      var f = o.face, cx = Math.round(o.x), yb = o.yb, sit = o.pose === 'sit';
+      if (opt.bend) return drawCrouch(o, opt);
+      var hy = sit ? yb - 24 : yb - 25, by = hy + 7, hx = f > 0 ? cx - 2 : cx - 3, ex = f > 0 ? hx + 4 : hx + 1, fx = f > 0 ? cx + 2 : cx - 2;
+      var skin = (o.skin), shirt = (o.shirt), pants = (o.pants), shoe = ('#2a2224'), dark = 'rgba(30,20,30,0.28)';
+      // legs
+      if (sit) {
+        rect(f > 0 ? cx - 2 : cx - 4, yb - 9, 7, 2, pants);
+        var sx = f > 0 ? cx + 3 : cx - 4; rect(sx, yb - 7, 2, 6, pants); rect(f > 0 ? sx : sx - 1, yb - 1, 3, 1, shoe);
+      } else {
+        var st = opt.step || 0;
+        for (var r = 0; r < 8; r++) {
+          var off = st % 2 && r >= 3 ? Math.min(2, Math.round((r - 2) / 2)) : 0, d = st === 1 ? 1 : -1;
+          rect(cx - 2 - f * d * off, yb - 9 + r, 2, 1, pants);
+          rect(cx + 1 + f * d * off, yb - 9 + r, 2, 1, pants);
+        }
+        var o1 = st % 2 ? -f * (st === 1 ? 1 : -1) * 2 : 0, o2 = -o1;
+        rect(cx - 2 + o1 + (f > 0 ? 0 : -1), yb - 1, 3, 1, shoe); rect(cx + 1 + o2 + (f > 0 ? 0 : -1), yb - 1, 3, 1, shoe);
+      }
+      // body
+      rect(cx - 2, by, 5, 9, shirt); rect(f > 0 ? cx - 2 : cx + 2, by, 1, 9, dark); rect(cx - 1, by, 3, 1, dark);
+      // head and hair
+      rect(hx, hy + 1, 6, 6, skin);
+      var hb = f > 0 ? hx : hx + 4, hc = (o.hair);
+      rect(hx, hy, 6, 2, hc); rect(hb, hy + 2, 2, o.style === 'long' ? 8 : 3, hc);
+      if (o.style === 'bun') rect(f > 0 ? hx - 1 : hx + 5, hy - 1, 2, 2, hc);
+      if (o.style === 'cap') { rect(hx, hy - 1, 6, 2, (o.cap)); rect(f > 0 ? hx + 6 : hx - 2, hy, 2, 1, (o.cap)); }
+      rect(ex, hy + 3, 1, 1, OUT);
+      if (opt.mouth) rect(ex, hy + 5, 1, 1, ('#9a4a40'));
+      // front arm: resting, gesturing, holding a cup or sipping from it
+      var arm = shade(o.shirt, -0.25);
+      if (opt.sip) { rect(fx, by + 1, 1, 2, arm); rect(fx + f, by, 1, 1, skin); cup(f > 0 ? hx + 6 : hx - 2, hy + 4); }
+      else if (opt.cup) { rect(fx, by + 1, 1, 4, arm); rect(fx + f, by + 5, 1, 1, skin); cup(f > 0 ? fx + 2 : fx - 3, by + 3); }
+      else if (opt.gesture) { rect(fx, by + 1, 1, 2, arm); rect(fx + f, by + 3, 1, 1, arm); rect(fx + 2 * f, by + 2, 1, 1, skin); }
+      else if (!sit) { rect(fx, by + 1, 1, 6, arm); rect(fx, by + 7, 1, 1, skin); }
+      else { rect(fx, by + 1, 1, 4, arm); rect(fx + f, by + 5, 2, 1, arm); rect(fx + 3 * f, by + 5, 1, 1, skin); }
+      if (opt.bubble) {                                                                                    // a little "…" speech bubble
+        var bx = f > 0 ? hx + 4 : hx - 7, byy = hy - 7;
+        rect(bx, byy, 9, 5, ('#fffdf7')); rect(bx + (f > 0 ? 1 : 6), byy + 5, 2, 1, ('#fffdf7'));
+        for (var dd = 0; dd < 3; dd++) rect(bx + 2 + dd * 2, byy + 2, 1, 1, ('#6b4a3a'));
+      }
+    }
+
+    function drawCrouch(o, opt) { // squatting on one knee, leaning in and patting the cat in front of them
+      var f = o.face, cx = Math.round(o.x), yb = o.yb, skin = (o.skin), shirt = (o.shirt), pants = (o.pants), shoe = ('#2a2224'), hc = (o.hair);
+      rect(f > 0 ? cx - 3 : cx + 2, yb - 6, 2, 4, pants); rect(f > 0 ? cx - 6 : cx + 2, yb - 2, 5, 2, pants);              // back leg: knee down, shin along the ground
+      rect(f > 0 ? cx - 7 : cx + 6, yb - 2, 1, 2, shoe);
+      rect(f > 0 ? cx - 1 : cx - 3, yb - 7, 5, 2, pants); rect(f > 0 ? cx + 2 : cx - 3, yb - 5, 2, 4, pants);                 // front leg: thigh and shin
+      rect(f > 0 ? cx + 2 : cx - 4, yb - 1, 3, 1, shoe);
+      var by = yb - 13;
+      for (var r = 0; r < 7; r++) rect(cx - 2 + (r < 2 ? 2 * f : r < 4 ? f : 0), by + r, 5, 1, shirt);                     // body leaning in
+      var hx = (f > 0 ? cx - 1 : cx - 4) + 2 * f, hy = by - 6;
+      rect(hx, hy + 1, 6, 5, skin); rect(hx, hy, 6, 2, hc); rect(f > 0 ? hx : hx + 4, hy + 2, 2, o.style === 'long' ? 6 : 2, hc);
+      if (o.style === 'cap') { rect(hx, hy - 1, 6, 2, (o.cap)); rect(f > 0 ? hx + 6 : hx - 2, hy, 2, 1, (o.cap)); }
+      if (o.style === 'bun') rect(f > 0 ? hx - 1 : hx + 5, hy - 1, 2, 2, hc);
+      rect(f > 0 ? hx + 4 : hx + 1, hy + 4, 1, 1, OUT);                                                                 // eye, looking down at the cat
+      var pat = opt.pat || 0;
+      for (var k = 0; k < 4; k++) rect(cx + (3 + k) * f, by + 2 + Math.round(k * 0.75), 1, 1, shirt);                      // arm reaching out
+      rect(f > 0 ? cx + 7 : cx - 8, by + 4 + pat, 2, 1, skin);                                                              // hand, patting
+    }
+
+
+    var pair = [{ pose: 'sit', skin: '#e2b48c', hair: '#2a1a14', style: 'long', shirt: '#d08ab0', pants: '#3a4a6a', face: 1, ph: 0.4 },
+                { pose: 'sit', skin: '#c98e62', hair: '#1c1c22', style: 'cap', cap: '#2e4a7a', shirt: '#e8d46a', pants: '#2e2e34', face: -1, ph: 2.7 }];
+    var stand = { pose: 'stand', skin: '#f1c9a5', hair: '#3e281c', style: 'bun', shirt: '#6aa060', pants: '#6a5a48', face: 1, ph: 1.2, x: 10, yb: 0 };
+    var walker = { pose: 'walk', skin: '#a8724a', hair: '#2a1a14', style: 'short', shirt: '#5a8ac0', pants: '#5a6a8a', face: 1, ph: 0, x: -99, yb: -99, tx: 0, ty: 0, v: 9, dist: 0, petUntil: 0, cool: 0, next: 0, cat: null };
+    function people() { var s = sets[1]; pair[0].x = s.x - 14; pair[1].x = s.x + 14; pair[0].yb = pair[1].yb = s.yb; }
+    function wFoot(x, y) { return [x - 4, y - 2, x + 4, y + 1]; }
+    function wFree(x, y) {
+      if (x < 6 || x > W - 6 || y < GY + 5 || y > H - 1) return false;
+      var f = wFoot(x, y);
+      if (sets.some(function (s) { return hit(f, [s.x - 23, s.yb - 4, s.x + 23, s.yb + 3]); })) return false;
+      if (hit(f, [stand.x - 8, stand.yb - 3, stand.x + 8, stand.yb + 2])) return false;
+      return dc.every(function (c) { return !hit(f, [c.x - 9, c.y - 4, c.x + 9, c.y + 2]); });
+    }
+    function wPlace() { for (var k = 0; k < 300; k++) { var x = 6 + Math.random() * (W - 12), y = GY + 5 + Math.random() * (H - GY - 6); if (wFree(x, y)) { walker.x = walker.tx = x; walker.yb = walker.ty = y; return; } } }
+    function wPick() { for (var k = 0; k < 40; k++) { var x = 6 + Math.random() * (W - 12), y = GY + 5 + Math.random() * (H - GY - 6), ok = wFree(x, y);
+      for (var j = 1; ok && j <= 12; j++) ok = wFree(walker.x + (x - walker.x) * j / 12, walker.yb + (y - walker.yb) * j / 12);
+      if (ok) { walker.tx = x; walker.ty = y; return; } } }
+    function moveWalker(t, dt) {
+      var w = walker;
+      if (w.petUntil) { if (t < w.petUntil) { if (w.cat) w.cat.happy = Math.max(w.cat.happy, t + 200); return; } w.petUntil = 0; w.cat = null; w.cool = t + 6000; w.next = 0; w.face = -w.face; }
+      if (reduce) return;
+      if (t > w.cool) {                                   // a cat right beside them: kneel down and give it a pat
+        var near = dc.filter(function (c) { return Math.abs(c.y - w.yb) <= 6 && Math.abs(c.x - w.x) <= 20 && Math.abs(c.x - w.x) >= 8; })[0];
+        if (near) { w.petUntil = t + 3200; w.cat = near; near.happy = t + 3400; near.tx = near.x; near.ty = near.y; w.face = near.x > w.x ? 1 : -1; w.tx = w.x; w.ty = w.yb; return; }
+      }
+      var dx = w.tx - w.x, dy = w.ty - w.yb, d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 0.4) { if (t > w.next) { wPick(); w.next = t + 2500 + Math.random() * 3500; } w.moving = false; return; }
+      var st = Math.min(d, w.v * dt), nx = w.x + dx / d * st, ny = w.yb + dy / d * st;
+      if (!wFree(nx, ny)) { w.tx = w.x; w.ty = w.yb; w.next = t + 600; w.moving = false; return; }
+      w.x = nx; w.yb = ny; w.dist += st; w.moving = true; if (Math.abs(dx) > 0.2) w.face = dx > 0 ? 1 : -1;
+    }
+    function paint(t) {
+      if (!W) return;
+      g.drawImage(bg, 0, 0);
+      var talk = Math.floor(t / 2600) % 2;
+      pair.forEach(function (q, i) {                      // chatting in turns, sipping now and then
+        var chat = !reduce && talk === i, sip = !reduce && !chat && Math.sin(t * 0.0011 + q.ph) > 0.6;
+        q.sipping = sip;
+        drawPerson(q, t, { sip: sip, mouth: chat && Math.floor(t / 200) % 2 === 0, gesture: chat && Math.floor(t / 900) % 2 === 0, bubble: chat && Math.floor(t / 2600) % 4 < 2 });
+      });
+      sets.forEach(function (s, k) {
+        table(s.x, s.yb);
+        rect(s.x - 1, s.yb - 17, 3, 4, '#ffd27a'); rect(s.x - 1, s.yb - 18, 3, 1, '#2c1a12'); rect(s.x - 1, s.yb - 13, 3, 1, '#2c1a12');
+        if (k === 1) pair.forEach(function (q, i) { if (!q.sipping) cup(s.x + (i ? 5 : -7), s.yb - 15); });
+      });
+      var o = !reduce && Math.sin(t * 0.0009 + stand.ph) > 0.75;
+      var list = [[stand, { sip: o, cup: !o }], [walker, walker.petUntil && t < walker.petUntil ? { bend: true, pat: Math.floor(t / 260) % 2 } : { step: walker.moving ? Math.floor(walker.dist / 2.5) % 4 : 0, cup: false }]];
+      list.sort(function (a, b) { return a[0].yb - b[0].yb; }).forEach(function (e) { if (e[0].yb > 0) drawPerson(e[0], t, e[1]); });
+    }
+    var dc = [];
+    function foot(x, y) { return [x - 7, y - 4, x + 7, y + 1]; }   // a cat's footprint, in yard pixels
+    function hit(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
+    function free(c, x, y) {
+      if (x < 9 || x > W - 9 || y < GY + 9 || y > H - 2) return false;  // stay on the gravel lane, fully in view
+      var f = foot(x, y);
+      if (blocks.some(function (b) { return hit(f, b); })) return false;
+      if (walker && hit(f, [walker.x - 7, walker.yb - 26, walker.x + 7, walker.yb + 14])) return false;
+      return dc.every(function (o) { return o === c || Math.abs(o.x - x) > 16 || Math.abs(o.y - y) > 13; });
+    }
+    function clear(c, x0, y0, x1, y1) { for (var k = 1; k <= 12; k++) { var t = k / 12; if (!free(c, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)) return false; } return true; }
+    function place(c) { for (var k = 0; k < 300; k++) { var x = 9 + Math.random() * (W - 18), y = GY + 9 + Math.random() * (H - GY - 11); if (free(c, x, y)) { c.x = c.tx = x; c.y = c.ty = y; return; } } }
+    function pick(c) { for (var k = 0; k < 40; k++) { var x = 9 + Math.random() * (W - 18), y = GY + 9 + Math.random() * (H - GY - 11); if (free(c, x, y) && clear(c, c.x, c.y, x, y)) { c.tx = x; c.ty = y; return; } } }
+    for (var i = 5; i < 10; i++) {
+      var el = document.createElement('div'), sp = document.createElement('canvas');
+      el.className = 'den-cat'; sp.width = sp.height = 32; el.appendChild(sp); box.appendChild(el);
+      var c = { el: el, g: sp.getContext('2d'), B: BREEDS[i], cache: {}, key: '', x: -99, y: -99, tx: 0, ty: 0, v: 7 + (i % 3) * 2,
+        next: 800 * (i - 4), moving: false, walk: 0, face: i % 2 ? 1 : -1, happy: 0, tailT: i, blink: 0, blinkNext: 1500 + i * 500 };
+      el.addEventListener('click', (function (c) { return function () { c.happy = performance.now() + 1500; c.el.classList.remove('is-hop'); void c.el.offsetWidth; c.el.classList.add('is-hop'); }; })(c));
+      dc.push(c);
+    }
+    function draw(c, t) {
+      var pet = t < c.happy, st = { pose: c.moving ? 'walk' : 'sit', step: c.moving ? Math.floor(c.walk) : 0, tail: pet ? 0 : Math.round(Math.sin(c.tailT) * 2), ear: 0,
+        eyes: pet ? 'happy' : t < c.blink ? 'blink' : 'open', pet: pet };
+      var key = st.pose + st.step + st.tail + st.eyes + (pet ? 'p' : '');
+      if (key !== c.key) { c.key = key; var spr = c.cache[key] || (c.cache[key] = drawCat(c.B, st)); c.g.clearRect(0, 0, 32, 32); c.g.drawImage(spr, 0, 0); }
+      var s = P * 16;                                     // sprite is 32px for a 16px cat; feet sit 2.5px above its bottom
+      c.el.style.transform = 'translate(' + Math.round(c.x * P - s / 2) + 'px,' + Math.round(c.y * P - s * 29.5 / 32) + 'px)';
+      c.el.style.zIndex = Math.round(c.y);
+      c.el.classList.toggle('is-flip', c.face < 0);
+    }
+    layout(); dc.forEach(function (c) { place(c); }); wPlace(); den._walker = walker;
+    var rt; window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(layout, 150); });
+    var seen = true, prevT = 0, lastPaint = 0;
+    if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { seen = es[0].isIntersecting; }).observe(den);
+    function tick(t) {
+      var dt = Math.min(0.05, (t - prevT) / 1000 || 0.016); prevT = t;
+      if (seen) { moveWalker(t, dt); if (t - lastPaint > 60) { lastPaint = t; paint(t); } }
+      if (seen) dc.forEach(function (c) {
+        if (!reduce && t > c.next && !c.moving) { pick(c); c.next = t + 3000 + Math.random() * 5000; }
+        var dx = c.tx - c.x, dy = c.ty - c.y, d = Math.sqrt(dx * dx + dy * dy);
+        if (d > 0.3 && !(t < c.happy)) {
+          var s = Math.min(d, c.v * dt), nx = c.x + dx / d * s, ny = c.y + dy / d * s;
+          if (!free(c, nx, ny)) { c.tx = c.x; c.ty = c.y; c.moving = false; c.next = t + 700; }   // someone stepped in the way: stop and rethink
+          else { c.x = nx; c.y = ny; c.moving = true; if (Math.abs(dx) > 0.2) c.face = dx > 0 ? 1 : -1; c.walk = (c.walk + s * 0.9 + 0.04) % 8; }
+        } else c.moving = false;
+        if (t > c.blinkNext) { c.blink = t + 150; c.blinkNext = t + 2500 + Math.random() * 3500; }
+        if (!reduce) c.tailT += dt * (c.moving ? 12 : 3.5);
+        draw(c, t);
+      });
+      requestAnimationFrame(tick);
+    }
+    dc.forEach(function (c) { draw(c, 0); });
+    requestAnimationFrame(tick);
+  })();
 
   /* ---------- Five-cat engine (PRD 4.1 – 4.2) ---------- */
   var layer = $('cats'), stage = $('stage'), hero = $('top'), yarnEl = $('yarn');
