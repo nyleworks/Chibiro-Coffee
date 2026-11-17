@@ -6,7 +6,7 @@
 
   /* ---------- Menu: Drinks / Snacks pages, 4×4 cards per page (2×4 on phones) ---------- */
   // t: 'i' iced, 'h' hot. Merged from the café's menu screenshots with duplicates removed.
-  var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
+  var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   // each shelf holds categories; item = [name, description, price (null = ask), 'i' iced / 'h' hot, badge]
   var MENU = {
     drinks: [
@@ -88,12 +88,83 @@
   if (small.addEventListener) small.addEventListener('change', function () { page = 0; renderMenu(); });
   renderMenu();
 
-  /* ---------- Perks (PRD 4.3, section 4) ---------- */
-  var PERKS = ['Specialty Home-Brewed Coffee', 'Late-Night Hours until 12:08 AM', 'Free Wi-Fi', 'Indoor & Outdoor Seating',
-    'Family-Friendly Space', 'Gender-Neutral Restrooms', 'Free Parking Lot & Street Parking'];
-  $('perks').innerHTML = PERKS.map(function (p, i) {
-    return '<div class="cb-perk"><span class="cb-perk__no" aria-hidden="true">0' + (i + 1) + '</span><h3 class="cb-perk__title">' + esc(p) + '</h3></div>';
+  /* ---------- Photo Dump (section 4): the owner's 10 featured customer photos, pegged to a string ---------- */
+  // To feature a photo: put the file in assets/photos/ and fill in src (e.g. 'assets/photos/01.jpg'), by (the poster's
+  // Instagram handle) and alt. An entry with no src shows a pixel placeholder.
+  // Before adding one: ask the poster first, and save the photo again with its location (GPS) data removed. Only files in
+  // assets/photos/ are shown: links to Instagram or other sites are ignored (and the site's security policy blocks them).
+  var PHOTOS = [
+    { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' },
+    { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }
+  ];
+  function placeholder(i) {                                 // a little 20×25 pixel picture: a latte, a cat, a plant, a moon or a heart
+    var bgs = ['#f9d5d0', '#dce8b8', '#e8d3a6', '#c9d8ee', '#f4e4c1'], ink = '#6b4a3a', px = [];
+    function r(x, y, w, h, c) { px.push('<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + c + '"/>'); }
+    r(0, 0, 20, 25, bgs[i % 5]); r(0, 18, 20, 7, 'rgba(44,26,18,0.08)');
+    var m = i % 5;
+    if (m === 0) { r(5, 10, 9, 8, '#fffdf7'); r(14, 12, 2, 1, '#fffdf7'); r(15, 13, 1, 2, '#fffdf7'); r(14, 15, 2, 1, '#fffdf7'); r(6, 10, 7, 2, '#c08a5a'); r(9, 10, 1, 1, '#fffdf7'); r(4, 18, 11, 1, ink); r(7, 6, 1, 3, 'rgba(107,74,58,0.4)'); r(10, 5, 1, 3, 'rgba(107,74,58,0.4)'); }
+    else if (m === 1) { r(5, 9, 10, 8, '#e8a060'); r(5, 7, 2, 2, '#e8a060'); r(13, 7, 2, 2, '#e8a060'); r(7, 12, 1, 1, ink); r(12, 12, 1, 1, ink); r(9, 14, 2, 1, '#d06a6a'); r(6, 17, 8, 2, '#e8a060'); }
+    else if (m === 2) { r(7, 15, 6, 4, '#c0603a'); r(6, 14, 8, 1, '#a04a2a'); r(9, 7, 2, 7, '#4a6b14'); r(6, 8, 3, 2, '#6b8e23'); r(11, 6, 3, 2, '#6b8e23'); r(5, 11, 4, 2, '#6b8e23'); r(11, 10, 4, 2, '#6b8e23'); }
+    else if (m === 3) { r(0, 0, 20, 18, '#2c3064'); r(11, 4, 5, 5, '#f6eed2'); r(10, 5, 1, 3, '#f6eed2'); r(12, 5, 2, 2, '#2c3064'); r(3, 3, 1, 1, '#fff'); r(6, 9, 1, 1, '#fff'); r(16, 12, 1, 1, '#fff'); r(0, 18, 20, 7, '#3a4a2a'); }
+    else { r(5, 8, 4, 3, '#e57373'); r(11, 8, 4, 3, '#e57373'); r(4, 9, 12, 3, '#e57373'); r(5, 12, 10, 2, '#e57373'); r(7, 14, 6, 2, '#e57373'); r(9, 16, 2, 1, '#e57373'); r(6, 9, 1, 1, '#f9d5d0'); }
+    return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 25" shape-rendering="crispEdges">' + px.join('') + '</svg>');
+  }
+  $('photoList').innerHTML = PHOTOS.map(function (ph, i) {
+    var own = /^assets\/photos\/[\w.-]+$/.test(ph.src || ''), no = (i < 9 ? '0' : '') + (i + 1), src = own ? ph.src : placeholder(i);
+    return '<li class="photo"><span class="photo__pin" aria-hidden="true"></span><figure class="photo__frame">' +
+      '<img class="photo__img' + (own ? '' : ' is-placeholder') + '" src="' + esc(src) + '" alt="' + esc(own ? (ph.alt || 'Customer photo ' + no) : 'Placeholder for featured photo ' + no) + '" width="160" height="200" loading="lazy" decoding="async">' +
+      '<figcaption class="photo__cap"><span>No. ' + no + '</span><span>' + esc(ph.by || '@your.handle') + '</span></figcaption></figure></li>';
   }).join('');
+  (function () {                                            // the string: pixel steps that dip between pegs and rise to each peg
+    var track = $('photoTrack'), list = $('photoList'), cv = $('photoString'), g = cv.getContext('2d');
+    function drawString() {                                 // the whole line sags under the photos' weight, deepest in the middle, with a small dip between pegs
+      var lis = list.children; if (!lis.length) return;
+      var w = track.scrollWidth, P = 3, y0 = 27, ox = list.offsetLeft, pins = [].map.call(lis, function (li) { return ox + li.offsetLeft + li.offsetWidth / 2; });
+      var L = Math.min(-40, pins[0] - 240), R = Math.max(w + 40, pins[pins.length - 1] + 240), D = innerWidth < 768 ? 72 : 120;
+      function sagY(x) { var t = (x - L) / (R - L); return y0 + D * 4 * t * (1 - t); }
+      pins.forEach(function (x, i) { var m = Math.round((sagY(x) - y0) / P) * P + 'px'; if (lis[i].style.marginTop !== m) lis[i].style.marginTop = m; });
+      var h = y0 + D + 24; cv.width = w; cv.height = h; cv.style.width = w + 'px'; cv.style.height = h + 'px';
+      g.clearRect(0, 0, w, h); g.fillStyle = '#2c1a12';
+      var pts = [L].concat(pins, [R]);
+      for (var s = 0; s < pts.length - 1; s++) {
+        var a = pts[s], b = pts[s + 1], d = Math.min(10, (b - a) * 0.04), ya = Math.round((sagY(a) - y0) / P) * P + y0, yb = Math.round((sagY(b) - y0) / P) * P + y0;
+        if (s === 0 || s === pts.length - 2) { ya = sagY(a); yb = sagY(b); d = 0; }
+        for (var x = Math.max(0, Math.floor(a / P) * P); x < Math.min(w, b); x += P) {
+          var t = (x + P / 2 - a) / (b - a); g.fillRect(x, Math.round((ya + (yb - ya) * t + d * 4 * t * (1 - t)) / P) * P, P, P);
+        }
+      }
+    }
+    if ('ResizeObserver' in window) new ResizeObserver(drawString).observe(list); else window.addEventListener('resize', drawString);
+    drawString();
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-photos]'); if (!b) return;
+      var step = list.children[1] ? list.children[1].offsetLeft - list.children[0].offsetLeft : 240;
+      track.scrollBy({ left: +b.dataset.photos * step * 2, behavior: reduce ? 'auto' : 'smooth' });
+    });
+    function arrows() { var m = track.scrollWidth - track.clientWidth - 2; document.querySelector('.photo-line__btn--prev').disabled = track.scrollLeft <= 2; document.querySelector('.photo-line__btn--next').disabled = track.scrollLeft >= m; }
+    track.addEventListener('scroll', arrows, { passive: true }); window.addEventListener('resize', arrows); arrows();
+    // each photo swings a little from its peg; scrolling sideways shoves them, and they swing harder before settling back
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var sw = [].map.call(list.children, function (li, i) { return { el: li, a: 0, v: 0, ph: i * 1.7, last: '' }; });
+    var lastX = track.scrollLeft, lastT = 0, kick = 0, onScreen = false, looping = false;
+    track.addEventListener('scroll', function () { var dx = track.scrollLeft - lastX; lastX = track.scrollLeft; kick += dx; start(); }, { passive: true });
+    function start() { if (!looping && onScreen) { looping = true; lastT = performance.now(); requestAnimationFrame(swing); } }
+    function swing(t) {
+      var dt = Math.min(50, t - lastT) / 1000; lastT = t;
+      var push = Math.max(-60, Math.min(60, kick)); kick = 0;
+      sw.forEach(function (p) {
+        var idle = Math.sin(t / 1000 * 1.3 + p.ph) * 1.2;                    // a slight breeze sway, in degrees
+        p.v += -push * (0.5 + 0.12 * Math.sin(p.ph));                    // the line is dragged one way, the photos lag behind
+        p.v += ((idle - p.a) * 26 - p.v * 2.6) * dt;                          // spring back toward the gentle sway, with damping
+        p.a = Math.max(-14, Math.min(14, p.a + p.v * dt));
+        var r = 'rotate(' + p.a.toFixed(2) + 'deg)';
+        if (r !== p.last) { p.el.style.transform = r; p.last = r; }
+      });
+      if (onScreen) requestAnimationFrame(swing); else looping = false;
+    }
+    if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { onScreen = es[0].isIntersecting; start(); }).observe(track);
+    else { onScreen = true; start(); }
+  })();
 
   /* ---------- Smooth-scroll links ---------- */
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -316,10 +387,10 @@
      Paste the two web app links (both end in /exec) here. While STAMP_API is empty the card runs in a
      preview mode that only lives in this browser, so the design can be tried out. */
   var STAMP_API = 'https://script.google.com/macros/s/AKfycbwR8Z7vlQEVyXehefGOcjkERVbE7l9H5FrJ0IwzMyVmkzl7V-aPuUicSdaz9dba1ZXx/exec';     // public deployment ("Who has access: Anyone"): looks up a card's stamps
-  var STAMP_STAFF = 'https://script.google.com/macros/s/AKfycbzCwCftbNpsDwIqmo1EqXWAJ1WeKWnyd1YudxPhTHwZ08Os7h2pCUfgBEONVk77mDHw/exec';   // staff deployment ("Who has access: Only myself"): the staff page
+  var STAMP_STAFF = 'https://script.google.com/macros/s/AKfycbzCwCftbNpsDwIqmo1EqXWAJ1WeKWnyd1YudxPhTHwZ08Os7h2pCUfgBEONVk77mDHw/exec';   // staff deployment ("Who has access: Only myself"): the staff page. Also in staff.js: keep the two the same.
   (function () {
     var cardEl = document.getElementById('stampCard'), side = document.getElementById('stampSide'); if (!cardEl || !side) return;
-    var SIZE = 10, CARD_KEY = 'chibiro-card', STAFF_KEY = 'chibiro-staff-phone', DEMO_KEY = 'chibiro-card-demo', TZ = 'Asia/Kuching';
+    var SIZE = 10, CARD_KEY = 'chibiro-card', PREV_KEY = 'chibiro-card-previous', STAFF_KEY = 'chibiro-staff-phone', DEMO_KEY = 'chibiro-card-demo', TZ = 'Asia/Kuching';
     var CATNAMES = ['Calico', 'Orange Tabby', 'Siamese', 'Tuxedo', 'Scottish Fold', 'Black Cat', 'Tortoiseshell', 'Grey Tabby', 'Snow', 'Ginger & White'];
     var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var demo = !STAMP_API;
@@ -336,7 +407,7 @@
 
     // ---- arriving from a scanned QR code (#card=…) or the café phone set-up link (#staff-phone=on|off) ----
     var hash = new URLSearchParams(location.hash.slice(1)), query = new URLSearchParams(location.search);
-    var scanned = hash.get('card') || query.get('card'), staffSetting = hash.get('staff-phone');
+    var scanned = hash.get('card'), staffSetting = hash.get('staff-phone');   // only #card=: the part after # never leaves the phone
     if (validCode(scanned) && STAMP_STAFF && load(STAFF_KEY) === '1') { location.replace(STAMP_STAFF + '?card=' + encodeURIComponent(scanned)); return; }
 
     var state = { code: load(CARD_KEY), card: null, msg: null, fresh: [], error: false, paused: false };
@@ -362,7 +433,15 @@
       if (demo) return Promise.resolve(demoCard());
       // A plain-text POST keeps this a "simple" request, which Apps Script web apps accept from any site
       return fetch(STAMP_API, { method: 'POST', body: JSON.stringify({ action: 'card', card: state.code }), redirect: 'follow' })
-        .then(function (r) { return r.json(); }).then(function (r) { return r && r.ok ? r.card : null; }).catch(function () { return null; });
+        .then(function (r) { return r.json(); }).then(function (r) { return r && r.ok ? norm(r.card) : null; }).catch(function () { return null; });
+    }
+    // The page only ever shows plain numbers, dates and a yes/no from the server, whatever it sends
+    function norm(c) {
+      if (!c || typeof c !== 'object') return null;
+      var whole = function (v, max) { v = Math.floor(Number(v)) || 0; return Math.max(0, Math.min(max, v)); };
+      return { member: whole(c.member, 999999), stamps: whole(c.stamps, SIZE), size: SIZE,
+        dates: Array.isArray(c.dates) ? c.dates.slice(0, SIZE).map(function (d) { return String(d).slice(0, 10); }) : [],
+        expires: typeof c.expires === 'string' ? c.expires.slice(0, 30) : null, stampedToday: c.stampedToday === true, freeDrinks: whole(c.freeDrinks, 999999) };
     }
     function apply(card) {
       if (!card) { state.error = true; return true; }
@@ -412,7 +491,7 @@
         h += '<li class="' + cls + '" title="' + esc(CATNAMES[i]) + '"><img class="stamp-head" src="' + headURL(i) + '" alt="" width="20" height="20">' +
           (on ? '<span class="stamp-slot__date">' + esc(short(c.dates[i] || '')) + '</span>' : last ? '<span class="stamp-slot__free">Free<br>Drink</span>' : '<span class="stamp-slot__num">' + (i + 1) + '</span>') + '</li>';
       }
-      h += '</ol><div class="stamp-card__foot"><div class="stamp-meter"><span style="width:' + (n / SIZE * 100) + '%"></span></div>';
+      h += '</ol><div class="stamp-card__foot"><div class="stamp-meter"><span data-fill="' + Math.round(n / SIZE * 100) + '"></span></div>';
       h += '<p class="stamp-card__count"><b>' + n + '/' + SIZE + '</b> · ' + (n >= SIZE ? 'your free drink is ready!' : (SIZE - n) + ' more cat' + (SIZE - n > 1 ? 's' : '') + ' to a free drink') + '</p>';
       if (c.expires) h += '<p class="stamp-card__exp">Expires <b>' + esc(longDate(c.expires)) + '</b> · one month after the last stamp</p>';
       else if (n >= SIZE) h += '<p class="stamp-card__exp">Show your QR code at the counter to claim it.</p>';
@@ -422,15 +501,17 @@
     var LOGO = (document.querySelector('.cb-nav__brand img') || {}).src || '';
     var SAMPLE = { member: 308, stamps: 6, dates: ['2026-11-03', '2026-11-05', '2026-11-07', '2026-11-10', '2026-11-12', '2026-11-16'], expires: '2026-12-16T15:59:59Z', freeDrinks: 0 };
     var sideHTML = side.innerHTML;
+    function fill() { [].forEach.call(cardEl.querySelectorAll('[data-fill]'), function (s) { s.style.width = s.dataset.fill + '%'; }); }
     function render() {
       if (!state.code) {                                  // no card yet: the sample card and how it works
-        cardEl.innerHTML = cardHTML(SAMPLE, true); cardEl.classList.add('is-sample');
+        cardEl.innerHTML = cardHTML(SAMPLE, true); cardEl.classList.add('is-sample'); fill();
         if (side.dataset.mode !== 'intro') { side.innerHTML = sideHTML; side.dataset.mode = 'intro'; }
         return;
       }
       cardEl.classList.remove('is-sample');
       var c = state.card;
       cardEl.innerHTML = c ? cardHTML(c) : '<p class="stamp-wait">' + (state.error ? 'Couldn\'t check your card. Check your internet and try again.' : 'Loading your card…') + '</p>';
+      fill();
       var h = '<h3 class="stamp-how__title">Your card</h3>';
       if (demo) h += '<p class="stamp-demo"><b>Preview mode.</b> Not linked to the Google Sheet yet, so this card only lives in this browser. Tap the button under the QR code to see a stamp land.</p>';
       if (state.msg) h += '<p class="stamp-msg' + (state.msg.ok ? ' stamp-msg--ok' : '') + '" role="status">' + esc(state.msg.text) + '</p>';
@@ -440,33 +521,47 @@
       if (demo) h += '<button class="cb-btn cb-btn--plain" type="button" data-stamp="demo">' + (c && c.stamps >= SIZE ? 'Preview: give the free drink' : 'Preview: add a stamp') + '</button>';
       else h += state.paused || state.error ? '<button class="stamp-link" type="button" data-stamp="check">Check for stamps</button>' : '<p class="stamp-live"><span class="stamp-live__dot" aria-hidden="true"></span>Live: new stamps appear here</p>';
       h += '<p class="stamp-small">Keep a screenshot of this card. If your phone ever loses it, scan the screenshot with your camera to bring it back.</p>' +
-        '<div class="stamp-links"><button class="stamp-link" type="button" data-stamp="copy">Copy my card link</button><button class="stamp-link" type="button" data-stamp="paste">Paste a card link</button></div>' +
+        '<div class="stamp-links"><button class="stamp-link" type="button" data-stamp="copy">Copy my card link</button><button class="stamp-link" type="button" data-stamp="paste">Paste a card link</button>' +
+        (validCode(load(PREV_KEY)) && load(PREV_KEY) !== state.code ? '<button class="stamp-link" type="button" data-stamp="back">Switch back to my other card</button>' : '') + '</div>' +
         '<p class="stamp-small">No sign-up. We don\'t ask for your name or phone number.</p>';
       side.innerHTML = h; side.dataset.mode = 'card';
       state.fresh = [];
     }
 
     // ---- live updates while the stamp card is on screen ----
-    var poll = { timer: 0, until: 0, busy: false }, onScreen = false;
-    function startLive() { poll.until = Date.now() + 3 * 60000; if (state.paused) { state.paused = false; render(); } clearTimeout(poll.timer); check(); }
+    // Gentle on the Google script (it allows only about 30 lookups at once, shared with the staff page):
+    // ask every 6 s for the first minute, then every 12 s, and pause after 2 minutes until the customer taps "Check".
+    var poll = { timer: 0, until: 0, from: 0, busy: false }, onScreen = false;
+    function startLive() { poll.from = Date.now(); poll.until = poll.from + 2 * 60000; if (state.paused) { state.paused = false; render(); } clearTimeout(poll.timer); check(); }
     function check() {
       if (poll.busy || !state.code) return; poll.busy = true;
       fetchCard().then(function (card) {
         poll.busy = false; if (apply(card)) render(); clearTimeout(poll.timer);
         if (demo || !onScreen || document.hidden) return;
         if (Date.now() > poll.until) { state.paused = true; render(); return; }
-        poll.timer = setTimeout(check, 3000);
+        poll.timer = setTimeout(check, Date.now() - poll.from < 60000 ? 6000 : 12000);
       });
     }
     if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { var was = onScreen; onScreen = es[0].isIntersecting; if (onScreen && !was && state.code) startLive(); }).observe(cardEl);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && onScreen && state.code) startLive(); });
 
     function say(text, ok) { state.msg = { text: text, ok: ok }; render(); }
+    // A card link or a pasted link only replaces this phone's card after asking. The card it replaces is kept,
+    // so "Switch back to my other card" can bring it back. Returns true when the new card is now in use.
+    function switchTo(code) {
+      if (code === state.code) { state.msg = { text: 'This card is already on this phone.', ok: true }; return false; }
+      if (state.code && !window.confirm('This phone already has a Chibiro stamp card.\n\nSwap to the card from this link? Your card stays saved on this phone, so you can switch back.')) {
+        state.msg = { text: 'Kept your own card. Nothing changed.', ok: true }; return false;
+      }
+      if (state.code) store(PREV_KEY, state.code);
+      state.code = code; store(CARD_KEY, code); state.card = null; return true;
+    }
     document.getElementById('stamps').addEventListener('click', function (e) {
       var b = e.target.closest('[data-stamp]'); if (!b) return;
       var act = b.dataset.stamp;
       if (act === 'get') { state.code = newCode(); store(CARD_KEY, state.code); state.card = null; state.msg = { text: 'Your card is ready! Show the QR code when you order.', ok: true }; render(); startLive(); }
       else if (act === 'check') { state.msg = null; startLive(); }
+      else if (act === 'back') { var prev = load(PREV_KEY); if (validCode(prev)) { store(PREV_KEY, state.code); state.code = prev; store(CARD_KEY, prev); state.card = null; say('Switched back to your other card.', true); startLive(); } }
       else if (act === 'demo') { var before = state.card; state.card = before; apply(demoStamp()); render(); }
       else if (act === 'copy') {
         var link = cardLink(state.code);
@@ -476,7 +571,7 @@
         var use = function (text) {
           var m = /card=([A-Za-z0-9_-]{22})/.exec(text || '');
           if (!m) { say('That isn\'t a card link. Open your card in the other browser and tap “Copy my card link” first.', false); return; }
-          state.code = m[1]; store(CARD_KEY, m[1]); state.card = null; say('Your card is back on this phone.', true); startLive();
+          if (switchTo(m[1])) { say('This card is now on this phone.', true); startLive(); } else render();
         };
         if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(use, function () { use(window.prompt('Paste your card link here:')); });
         else use(window.prompt('Paste your card link here:'));
@@ -487,10 +582,11 @@
     if (scanned || staffSetting) { query.delete('card'); var qs = query.toString(); history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + '#stamps'); }
     if (staffSetting === 'on' || staffSetting === 'off') {
       store(STAFF_KEY, staffSetting === 'on' ? '1' : null);
-      state.msg = { text: staffSetting === 'on' ? 'This phone is now the café phone. Scanning a customer\'s card will open the staff page.' : 'This phone is no longer the café phone.', ok: true };
+      state.msg = { text: staffSetting === 'on' ? 'This phone is now the café phone. Scan cards with the staff scanner (staff.html on this site), not the camera app.' : 'This phone is no longer the café phone.', ok: true };
       if (!state.code) state.code = newCode(), store(CARD_KEY, state.code);
     } else if (validCode(scanned) && scanned !== state.code) {
-      state.code = scanned; store(CARD_KEY, scanned); state.card = null; state.msg = { text: 'Your card is back on this phone.', ok: true };
+      var had = !!state.code;
+      if (switchTo(scanned)) state.msg = { text: had ? 'This card is now on this phone.' : 'Your card is back on this phone.', ok: true };
     }
     render();
     if (state.code) fetchCard().then(function (card) { if (apply(card)) render(); });
@@ -742,6 +838,7 @@
 
   /* ---------- Five-cat engine (PRD 4.1 – 4.2) ---------- */
   var layer = $('cats'), stage = $('stage'), hero = $('top'), yarnEl = $('yarn');
+  hero.appendChild(layer);                                  // the cat layer lives inside the hero, so it scrolls with the yard natively (no lag or jitter)
   var HEART = 'assets/heart.svg', NOTE = 'assets/note.svg';
   var sound = false;
   // ease = how fast each cat closes on its target; bounce = extra hop in px while walking
@@ -860,7 +957,7 @@
 
   function frame(t) {
     var dt = Math.min(48, t - prev || 16.7) / 16.7; prev = t;
-    var W = window.innerWidth, H = window.innerHeight;
+    var W = window.innerWidth, H = window.innerHeight, hr = hero.getBoundingClientRect(), hx = hr.left, hy = hr.top;   // positions are worked out in the viewport, then drawn relative to the hero
     var mobile = W < 768, inHero = playful;      // the cats live in the hero yard and scroll away with it
     var s = mobile ? (inHero ? 32 : 48) : (inHero ? 48 : 64), gap = mobile ? 2 : 12, ledge = 8;
     var n = cats.length, packW = n * s + (n - 1) * gap;
@@ -889,7 +986,7 @@
       var ys = Math.round(s * 0.3 * SCL(yarn.ay));
       yarnEl.style.display = 'block';
       if (yarnEl._s !== ys) { yarnEl._s = ys; yarnEl.style.width = yarnEl.style.height = ys + 'px'; yarnEl.style.borderWidth = Math.max(2, Math.round(ys / 6)) + 'px'; }
-      yarnEl.style.transform = 'translate3d(' + Math.round(Rc.left + yarn.ax * Pp - ys / 2) + 'px,' + Math.round(Rc.top + yarn.ay * Pp - ys) + 'px,0)';
+      yarnEl.style.transform = 'translate3d(' + Math.round(Rc.left - hx + yarn.ax * Pp - ys / 2) + 'px,' + Math.round(Rc.top - hy + yarn.ay * Pp - ys) + 'px,0)';
     } else { yarnEl.style.display = 'none'; G = G && inHero ? G : null; cats.forEach(function (c) { c.ready = false; }); }
     var catBoxes = [];
     if (SC && SC.pets) while (SC.pets.length) { var pc = cats[SC.pets.shift()]; if (pc) petCat(pc, 3000); }
@@ -972,7 +1069,7 @@
 
       var bob = moving && c.bounce ? (step % 4 < 2 ? -c.bounce : 0) : 0;
       var y = c.y + bob;
-      c.el.style.transform = 'translate3d(' + Math.round(c.x) + 'px,' + Math.round(y) + 'px,0)';
+      c.el.style.transform = 'translate3d(' + Math.round(c.x - hx) + 'px,' + Math.round(y - hy) + 'px,0)';
     });
     if (info && info.W && yarn.ready && !yarn.path.length && t > yarn.kickCool) cats.some(function (c) {   // a cat touching the ball bats it away
       if (!c.ready || !hit(catBox(c.ax, c.ay), [yarn.ax - 3, yarn.ay - 5, yarn.ax + 3, yarn.ay + 1])) return false;
@@ -991,10 +1088,6 @@
       return true;
     });
     if (SC) SC.cats = catBoxes;
-    // only show the cats inside the hero, below the sticky nav, so they never ride along with the page
-    var hr = hero.getBoundingClientRect(), nb = navEl ? Math.max(0, navEl.getBoundingClientRect().bottom) : 0;
-    var clip = 'inset(' + Math.round(Math.max(0, hr.top, nb)) + 'px 0 ' + Math.round(Math.max(0, H - hr.bottom)) + 'px 0)';
-    if (clip !== layer._clip) { layer._clip = clip; layer.style.clipPath = clip; layer.style.visibility = hr.bottom <= nb ? 'hidden' : ''; }
     // light the cats like the scene: as they are at sunset, softly darker (and a touch cooler) at night; normal outside the hero
     var nt = info && info.W && SC.night ? Math.round(SC.night * 50) / 50 : 0;
     if (nt !== lastNight) {

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Only this site's own files may run here. The page talks to no server: it only reads QR codes with the camera. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; media-src 'self' blob: mediastream:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<title>Chibiro staff scanner</title>
+<link rel="icon" href="assets/chibiro-favicon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="cb staff">
+  <main class="staff__wrap">
+    <img src="assets/chibiro-wordmark.svg" alt="Chibiro Coffee" width="84" height="43">
+    <h1 class="staff__title">Staff scanner</h1>
+    <p class="staff__lead">Scan a customer's stamp card here, not with the phone's own camera app. This page only accepts real Chibiro cards and never opens other links.</p>
+    <div class="staff__cam">
+      <video id="cam" playsinline muted aria-label="Camera view"></video>
+      <canvas id="frame" hidden></canvas>
+    </div>
+    <p class="staff__status" id="status" role="status" aria-live="polite">Tap Start camera, then hold the customer's QR code in the box.</p>
+    <button class="cb-btn cb-btn--berry staff__btn" type="button" id="start">Start camera</button>
+    <p class="staff__note">Never type the Chibiro Google password after scanning a code. Google only asks for it on the real Google sign-in page, and the staff page stays signed in.</p>
+  </main>
+<script src="staff.js" defer></script>
+</body>
+</html>
