@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- Content Security Policy: only this site's own scripts, styles, fonts and images run; the page may only talk to the stamp card (Google Apps Script).
+<!-- Content Security Policy: only this site's own scripts, styles, fonts and images run; the page may only talk to this site itself and the stamp card (Google Apps Script).
+     'self' in connect-src lets checkers like Lighthouse read robots.txt from this site; it opens nothing outside it.
      If a new outside service is added (photos, maps, analytics), add its address here or the browser will block it. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Chibiro Coffee — Home-Brewed Specialty Coffee in Likas</title>
 <meta name="description" content="Chibiro Coffee: cozy, cat-approved specialty coffee in Taman Jaya, Likas, Kota Kinabalu. Open Tuesday to Sunday, 3:08 PM – 12:08 AM.">
@@ -105,7 +106,111 @@
       <h2 class="cb-section__title">Chibiro Brews &amp; Bites</h2>
       <p class="cb-section__lead">Drinks or snacks? Café prices in MYR.</p>
       <div class="cb-tabs" id="tabs"></div>
-      <div id="menu"></div>
+      <!-- The whole menu lives here, so Google and other search engines can read every item. To change the menu, edit these cards:
+           one <section> per category (data-shelf="drinks" or "snacks"), one <article> per item. app.js only splits it into pages. -->
+      <div class="menu" id="menu">
+        <section class="menu-group" data-shelf="drinks" aria-labelledby="menu-signatures">
+          <h3 class="menu-group__title" id="menu-signatures">Signatures</h3>
+          <div class="menu-grid">
+            <article class="cb-item cb-item--featured"><div class="cb-item__head"><h4 class="cb-item__name">Strawberry Matcha Latte</h4><span class="cb-tag cb-tag--berry">Best Seller</span></div><p class="cb-item__meta">Matcha + strawberry puree + milk</p><div class="cb-item__foot"><span class="cb-item__price">RM 16.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Strawberry Cloud Matcha</h4></div><p class="cb-item__meta">Matcha + strawberry puree + milk + cold foam</p><div class="cb-item__foot"><span class="cb-item__price">RM 18.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Tiramisu Latte</h4></div><p class="cb-item__meta">Signatures</p><div class="cb-item__foot"><span class="cb-item__price">RM 20.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Mont Blanc</h4></div><p class="cb-item__meta">Orange cloud cream, orange americano</p><div class="cb-item__foot"><span class="cb-item__price">RM 16.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Sunset Americano</h4></div><p class="cb-item__meta">Orange juice and americano</p><div class="cb-item__foot"><span class="cb-item__price">RM 11.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Strawberricano</h4></div><p class="cb-item__meta">Strawberry and espresso</p><div class="cb-item__foot"><span class="cb-item__price">RM 11.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Espresso Tonic</h4></div><p class="cb-item__meta">Signatures</p><div class="cb-item__foot"><span class="cb-item__price">RM 16.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Dirty Latte</h4></div><p class="cb-item__meta">Espresso over chilled special milk</p><div class="cb-item__foot"><span class="cb-item__price">RM 16.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Strawberry Spanish Latte</h4></div><p class="cb-item__meta">Signatures</p><div class="cb-item__foot"><span class="cb-item__price">RM 16.00</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Mango Cafe Latte</h4></div><p class="cb-item__meta">Mango milk and espresso</p><div class="cb-item__foot"><span class="cb-item__price">RM 14.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Chocolate Clouds</h4></div><p class="cb-item__meta">3 types of chocolate with cloud on top</p><div class="cb-item__foot"><span class="cb-item__price">RM 16.00</span><span class="cb-item__opts"></span></div></article>
+          </div>
+        </section>
+        <section class="menu-group" data-shelf="drinks" aria-labelledby="menu-iced-coffee">
+          <h3 class="menu-group__title" id="menu-iced-coffee">Iced Coffee</h3>
+          <div class="menu-grid">
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Americano</h4></div><p class="cb-item__meta">Iced Coffee</p><div class="cb-item__foot"><span class="cb-item__price">RM 9.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Cafe Latte</h4></div><p class="cb-item__meta">White coffee</p><div class="cb-item__foot"><span class="cb-item__price">RM 11.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Spanish Latte</h4></div><p class="cb-item__meta">Cafe latte + condensed milk</p><div class="cb-item__foot"><span class="cb-item__price">RM 12.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Mocha</h4></div><p class="cb-item__meta">Choco + espresso + milk</p><div class="cb-item__foot"><span class="cb-item__price">RM 14.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Caramel Latte</h4></div><p class="cb-item__meta">Cafe latte + caramel syrup</p><div class="cb-item__foot"><span class="cb-item__price">RM 14.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Hazelnut Latte</h4></div><p class="cb-item__meta">Cafe latte + syrup</p><div class="cb-item__foot"><span class="cb-item__price">RM 14.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">French Vanilla Latte</h4></div><p class="cb-item__meta">Cafe latte + syrup</p><div class="cb-item__foot"><span class="cb-item__price">RM 14.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Strawberry Cafe Latte</h4></div><p class="cb-item__meta">Iced Coffee</p><div class="cb-item__foot"><span class="cb-item__price">RM 14.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Blueberry Latte</h4></div><p class="cb-item__meta">Iced Coffee</p><div class="cb-item__foot"><span class="cb-item__price">RM 14.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+          </div>
+        </section>
+        <section class="menu-group" data-shelf="drinks" aria-labelledby="menu-hot-coffee">
+          <h3 class="menu-group__title" id="menu-hot-coffee">Hot Coffee</h3>
+          <div class="menu-grid">
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Hot Americano</h4></div><p class="cb-item__meta">Black coffee</p><div class="cb-item__foot"><span class="cb-item__price">RM 8.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--hot">Hot</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Hot Cafe Latte</h4></div><p class="cb-item__meta">White coffee</p><div class="cb-item__foot"><span class="cb-item__price">RM 10.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--hot">Hot</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Hot Spanish Latte</h4></div><p class="cb-item__meta">Hot Coffee</p><div class="cb-item__foot"><span class="cb-item__price">RM 11.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--hot">Hot</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Hot Mocha Latte</h4></div><p class="cb-item__meta">Choco + espresso + latte</p><div class="cb-item__foot"><span class="cb-item__price">RM 12.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--hot">Hot</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Espresso</h4></div><p class="cb-item__meta">Double shot</p><div class="cb-item__foot"><span class="cb-item__price">RM 6.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--hot">Hot</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Extra Shot Espresso</h4></div><p class="cb-item__meta">Add to any drink</p><div class="cb-item__foot"><span class="cb-item__price">RM 3.00</span><span class="cb-item__opts"></span></div></article>
+          </div>
+        </section>
+        <section class="menu-group" data-shelf="drinks" aria-labelledby="menu-matcha-and-taro">
+          <h3 class="menu-group__title" id="menu-matcha-and-taro">Matcha &amp; Taro</h3>
+          <div class="menu-grid">
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Matcha Latte</h4></div><p class="cb-item__meta">Matcha + milk</p><div class="cb-item__foot"><span class="cb-item__price">RM 14.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Hot Matcha Latte</h4></div><p class="cb-item__meta">Matcha + steamed milk</p><div class="cb-item__foot"><span class="cb-item__price">RM 12.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--hot">Hot</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Blueberry Matcha</h4></div><p class="cb-item__meta">Matcha &amp; Taro</p><div class="cb-item__foot"><span class="cb-item__price">RM 16.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Mango Matcha</h4></div><p class="cb-item__meta">Matcha &amp; Taro</p><div class="cb-item__foot"><span class="cb-item__price">RM 16.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Matcha Cream Taro</h4></div><p class="cb-item__meta">Matcha &amp; Taro</p><div class="cb-item__foot"><span class="cb-item__price">RM 16.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Taro Latte</h4></div><p class="cb-item__meta">Matcha &amp; Taro</p><div class="cb-item__foot"><span class="cb-item__price">RM 14.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Hot Taro Latte</h4></div><p class="cb-item__meta">Matcha &amp; Taro</p><div class="cb-item__foot"><span class="cb-item__price">RM 12.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--hot">Hot</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Strawberry Cream Taro</h4></div><p class="cb-item__meta">Matcha &amp; Taro</p><div class="cb-item__foot"><span class="cb-item__price">RM 16.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+          </div>
+        </section>
+        <section class="menu-group" data-shelf="drinks" aria-labelledby="menu-chocolate">
+          <h3 class="menu-group__title" id="menu-chocolate">Chocolate</h3>
+          <div class="menu-grid">
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Chocolate</h4></div><p class="cb-item__meta">Cocoa + sauce + milk</p><div class="cb-item__foot"><span class="cb-item__price">RM 12.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Hot Chocolate Latte</h4></div><p class="cb-item__meta">Cocoa powder + cocoa sauce + milk</p><div class="cb-item__foot"><span class="cb-item__price">RM 10.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--hot">Hot</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Triple Chocolate</h4></div><p class="cb-item__meta">3 types of chocolate + milk</p><div class="cb-item__foot"><span class="cb-item__price">RM 13.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Strawberry Chocolate</h4></div><p class="cb-item__meta">Cocoa + milk + strawberry puree</p><div class="cb-item__foot"><span class="cb-item__price">RM 14.00</span><span class="cb-item__opts"><span class="cb-tag cb-tag--ice">Iced</span></span></div></article>
+          </div>
+        </section>
+        <section class="menu-group" data-shelf="drinks" aria-labelledby="menu-tea-and-others">
+          <h3 class="menu-group__title" id="menu-tea-and-others">Tea &amp; Others</h3>
+          <div class="menu-grid">
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Peach Zest Tea</h4></div><p class="cb-item__meta">Peach tea with lemon slices</p><div class="cb-item__foot"><span class="cb-item__price">RM 12.00</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Passion Zest Tea</h4></div><p class="cb-item__meta">Passion fruit tea with lemon slices</p><div class="cb-item__foot"><span class="cb-item__price">RM 12.00</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Plain Water</h4></div><p class="cb-item__meta">Tea &amp; Others</p><div class="cb-item__foot"><span class="cb-item__price">RM 0.50</span><span class="cb-item__opts"></span></div></article>
+          </div>
+        </section>
+        <section class="menu-group" data-shelf="snacks" aria-labelledby="menu-sweets">
+          <h3 class="menu-group__title" id="menu-sweets">Sweets</h3>
+          <div class="menu-grid">
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Seasalt Chocolate Cookies</h4></div><p class="cb-item__meta">Sweets</p><div class="cb-item__foot"><span class="cb-item__price">RM 2.00</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Black Cookies</h4></div><p class="cb-item__meta">Sweets</p><div class="cb-item__foot"><span class="cb-item__price">RM 2.00</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Soft Cookies</h4></div><p class="cb-item__meta">Sweets</p><div class="cb-item__foot"><span class="cb-item__price is-ask">Ask us</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Brownies</h4></div><p class="cb-item__meta">Sweets</p><div class="cb-item__foot"><span class="cb-item__price">RM 5.50</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Fuggy Brownies</h4></div><p class="cb-item__meta">Sweets</p><div class="cb-item__foot"><span class="cb-item__price">RM 8.50</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Banana Cake</h4></div><p class="cb-item__meta">Sweets</p><div class="cb-item__foot"><span class="cb-item__price">RM 5.00</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Lemon Pound Cake</h4></div><p class="cb-item__meta">Sweets</p><div class="cb-item__foot"><span class="cb-item__price">RM 9.00</span><span class="cb-item__opts"></span></div></article>
+          </div>
+        </section>
+        <section class="menu-group" data-shelf="snacks" aria-labelledby="menu-savoury">
+          <h3 class="menu-group__title" id="menu-savoury">Savoury</h3>
+          <div class="menu-grid">
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Mee Siam</h4></div><p class="cb-item__meta">Savoury</p><div class="cb-item__foot"><span class="cb-item__price">RM 3.00</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Nasi Lemak Mini</h4></div><p class="cb-item__meta">Savoury</p><div class="cb-item__foot"><span class="cb-item__price">RM 3.00</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Laksa Peneng</h4></div><p class="cb-item__meta">Savoury</p><div class="cb-item__foot"><span class="cb-item__price">RM 10.00</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Meggie Cup</h4></div><p class="cb-item__meta">Cup noodles</p><div class="cb-item__foot"><span class="cb-item__price">RM 3.50</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Meggie Bowl</h4></div><p class="cb-item__meta">Savoury</p><div class="cb-item__foot"><span class="cb-item__price is-ask">Ask us</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Roasted Pumpkin Seeds</h4></div><p class="cb-item__meta">Savoury</p><div class="cb-item__foot"><span class="cb-item__price">RM 4.00</span><span class="cb-item__opts"></span></div></article>
+          </div>
+        </section>
+        <section class="menu-group" data-shelf="snacks" aria-labelledby="menu-for-the-cats">
+          <h3 class="menu-group__title" id="menu-for-the-cats">For the Cats</h3>
+          <div class="menu-grid">
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Cat Treats</h4></div><p class="cb-item__meta">Treat the café cats</p><div class="cb-item__foot"><span class="cb-item__price">RM 1.50</span><span class="cb-item__opts"></span></div></article>
+            <article class="cb-item"><div class="cb-item__head"><h4 class="cb-item__name">Cat Figurine</h4></div><p class="cb-item__meta">A little Chibiro to take home</p><div class="cb-item__foot"><span class="cb-item__price">RM 5.00</span><span class="cb-item__opts"></span></div></article>
+          </div>
+        </section>
+      </div>
       <div class="order">
         <a class="cb-btn cb-btn--berry" href="https://order.epos.com/page/my-muhammad-auf-afibukhari/menu?storeId=20260727111511000210001507559724&amp;serviceType=PICKUP&amp;storeType=RESTAURANT" target="_blank" rel="noopener">Order Online</a>
         <span class="cb-btn cb-btn--plain is-off" aria-disabled="true">Order on WhatsApp · Soon</span>
