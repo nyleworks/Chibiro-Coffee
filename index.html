@@ -31,8 +31,8 @@
     <a class="cb-nav__brand" href="#top" data-go="top"><img src="assets/chibiro-wordmark.svg" alt="Chibiro Coffee" width="84" height="43"></a>
     <ul class="cb-nav__links">
       <li><a href="#stamps" data-go="stamps">Stamp<span class="cb-nav__wide"> Card</span><span class="cb-nav__narrow">s</span></a></li>
+      <li><a href="#photos" data-go="photos">Photos</a></li>
       <li><a href="#brews" data-go="brews">Our Brews</a></li>
-      <li><a href="#about" data-go="about">About</a></li>
       <li><a href="#visit" data-go="visit">Visit Us</a></li>
     </ul>
     <div class="cb-nav__tools">
@@ -78,24 +78,36 @@
     </div>
   </section>
 
-  <section class="cb-section" id="brews">
+  <section class="cb-section photos" id="photos">
+    <div class="cb-section__inner">
+      <h2 class="cb-section__title">Photo Dump</h2>
+      <p class="cb-section__lead">Snap your visit, post it on Instagram and tag Chibiro Coffee. We pick our 10 favourite shots and hang them up here.</p>
+    </div>
+    <div class="photo-line">
+      <button class="photo-line__btn photo-line__btn--prev" type="button" data-photos="-1" aria-label="Previous photos"></button>
+      <div class="photo-line__track" id="photoTrack" tabindex="0" role="region" aria-label="Featured customer photos. Scroll sideways to see all 10.">
+        <canvas class="photo-line__string" id="photoString" aria-hidden="true"></canvas>
+        <ol class="photo-line__list" id="photoList"></ol>
+      </div>
+      <button class="photo-line__btn photo-line__btn--next" type="button" data-photos="1" aria-label="Next photos"></button>
+    </div>
+    <div class="cb-section__inner photos__cta">
+      <p class="photos__ask">Post your photo and don't forget to tag us!</p>
+      <p class="photos__tags"><span class="photos__tag">@chibirocoffee</span><span class="photos__tag">#ChibiroCoffee</span></p>
+      <a class="cb-btn" href="#" data-todo="Instagram link">Open Instagram</a>
+    </div>
+  </section>
+
+  <section class="cb-section alt" id="brews">
     <div class="cb-section__inner">
       <h2 class="cb-section__title">Chibiro Brews &amp; Bites</h2>
       <p class="cb-section__lead">Drinks or snacks? Café prices in MYR.</p>
       <div class="cb-tabs" id="tabs"></div>
       <div id="menu"></div>
       <div class="order">
-        <a class="cb-btn cb-btn--berry" href="https://wa.me/601166769396" target="_blank" rel="noopener">Order on WhatsApp</a>
-        <a class="cb-btn cb-btn--plain" href="#" data-todo="GrabFood link">Order on GrabFood</a>
+        <a class="cb-btn cb-btn--berry" href="https://order.epos.com/page/my-muhammad-auf-afibukhari/menu?storeId=20260727111511000210001507559724&amp;serviceType=PICKUP&amp;storeType=RESTAURANT" target="_blank" rel="noopener">Order Online</a>
+        <span class="cb-btn cb-btn--plain is-off" aria-disabled="true">Order on WhatsApp · Soon</span>
       </div>
-    </div>
-  </section>
-
-  <section class="cb-section alt" id="about">
-    <div class="cb-section__inner">
-      <h2 class="cb-section__title">Why Hang Out Here?</h2>
-      <p class="cb-section__lead">Seven good reasons, none of them the cats.</p>
-      <div class="cb-grid perks" id="perks"></div>
     </div>
   </section>
 
@@ -114,15 +126,13 @@
         <section class="cb-panel">
           <h3 class="cb-panel__title">Contact</h3>
           <dl class="cb-panel__rows">
-            <div class="cb-panel__row"><dt>WhatsApp / Phone</dt><dd><a href="https://wa.me/601166769396" target="_blank" rel="noopener">+60 11-6676 9396</a></dd></div>
+            <div class="cb-panel__row"><dt>WhatsApp / Phone</dt><dd>Coming soon</dd></div>
             <div class="cb-panel__row"><dt>Parking</dt><dd>Free lot &amp; street</dd></div>
           </dl>
         </section>
       </div>
       <div class="visit__links">
         <a class="cb-btn" href="https://www.google.com/maps/search/?api=1&query=Chibiro+Coffee+Taman+Jaya+Likas+Kota+Kinabalu" target="_blank" rel="noopener">Open in Google Maps</a>
-        <a class="cb-btn cb-btn--plain" href="#" data-todo="Instagram link">Instagram</a>
-        <a class="cb-btn cb-btn--plain" href="#" data-todo="Grab link">GrabFood / Grab Dine Out</a>
       </div>
     </div>
   </section>

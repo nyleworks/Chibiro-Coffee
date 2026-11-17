@@ -45,17 +45,20 @@
   function lit(a) { return 'rgba(255,214,130,' + Math.max(0, Math.min(1, a)).toFixed(2) + ')'; }
 
   /* ---------- Timeline ---------- */
-  var HOLD = 16000, FADE = 4000, SEG = HOLD + FADE, LOOP = SEG * NP;
+  var HOLDS = [5000, 15000], FADE = 4000;                 // sunset holds 5 s, night 15 s (Niekki), each with a 4 s fade into the next
+  var STARTS = HOLDS.map(function (h, i) { return HOLDS.slice(0, i).reduce(function (a, b) { return a + b + FADE; }, 0); }), LOOP = STARTS[NP - 1] + HOLDS[NP - 1] + FADE;
   var hr = new Date().getHours();
-  var clock = ((hr >= 6 && hr < 19) ? 0 : 1) * SEG;
+  var clock = STARTS[(hr >= 6 && hr < 19) ? 0 : 1];
   function smooth(x) { return x * x * (3 - 2 * x); }
   function phase() {
-    var e = ((clock % LOOP) + LOOP) % LOOP, seg = Math.floor(e / SEG), w = e - seg * SEG;
-    return w < HOLD ? seg : seg + smooth((w - HOLD) / FADE);
+    var e = ((clock % LOOP) + LOOP) % LOOP, seg = NP - 1; while (seg > 0 && e < STARTS[seg]) seg--;
+    var w = e - STARTS[seg];
+    return w < HOLDS[seg] ? seg : seg + smooth((w - HOLDS[seg]) / FADE);
   }
 
   /* ---------- Layout (rebuilt on resize) ---------- */
   var W = 0, H = 0, P = 3, skyTop = 0, panelB = 0, yardTop, yd;
+  var NAP = [".................o........o...", "................obo......obo..", "......ooooooooooobpoooooopbo..", "....oobbbbbbbbbbobpbbssbbpbo..", "...obbsbbbsbbbsbsbbbbsbbbbo...", "..obbbsbbbsbbbsbsbbbbbbbbbbo..", ".obbbbbsbbbsbbbssbbbbbbbbbbo..", "obbbbbbbbbbbbbbbbbebbebebbeo..", "obbbbbbbbbbbbbbbbbbeewwbeebo..", "obbbbbbbbbbbbbbbbbkwwwnwwbko..", ".obbbbbbbssssssbbbbwwwwwwbo...", "..ossssssttttttsswwwwwwwwwo...", "..ottttttttttttttwwwwowwwwwo..", "..owwttttttttttttttttoooooo...", "...oooooottttttoooooo........."], nap = null;
   var house = {}, sign = {}, lot = {}, hills = [], shops = [], bgTrees = [], wires = [], tower = null, nbL = null, nbR = null;
   var furn = [], people = [], scene = [], tent = null, cpoles = [], strands = [], stars = [], clouds = [], birds = [], flies = [];
   var skyImg = null, gravel = null, path = null, statics = [], openStand = null;
@@ -75,7 +78,8 @@
   function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
-  function signSize() { var k = clamp(Math.min(Math.floor((W * 0.78 - 8) / 27), Math.floor((H * 0.16 - 6) / 5)), 2, 6); return { k: k, w: 27 * k + (k + 2) * 2, h: 5 * k + (k + 2) * 2 }; }
+  // the sign is about 10 screen px per letter pixel on every screen, so desktop matches phones
+  function signSize() { var k = clamp(Math.min(Math.floor((W * 0.78 - 8) / 27), Math.floor((H * 0.16 - 6) / 5), Math.round(10 / P)), 2, 6); return { k: k, w: 27 * k + (k + 2) * 2, h: 5 * k + (k + 2) * 2 }; }
   // the gravel yard is a V: as wide as the house front at the porch, opening out toward the viewer at the curb
   function edgeL(y) { return Math.round(path.lt + (path.lb - path.lt) * clamp((y - yardTop) / yd, 0, 1)); }
   function edgeR(y) { return Math.round(path.rt + (path.rb - path.rt) * clamp((y - yardTop) / yd, 0, 1)); }
@@ -86,8 +90,11 @@
     yardTop = H - yd;
 
     // the CHIBIRO sign floats on its own, centred in the upper part of the frame
-    var s = signSize(), sy = panelB + Math.max(4, Math.round((H - panelB) * 0.05));
+    // a big ginger cat sleeps curled up on top of the CHIBIRO letters, over the left end; the sign moves down to make room
+    var s = signSize(), cs = Math.max(1, Math.round(s.k * 0.4)), lift = NAP.length * cs - (s.k + 2) - cs;
+    var sy = panelB + Math.max(4, Math.round((H - panelB) * 0.05)) + Math.max(0, lift);
     sign = { k: s.k, w: s.w, h: s.h, x: Math.round(W / 2 - s.w / 2), y: sy };
+    nap = { cs: cs, x: sign.x + s.k + 2 + s.k, y: sign.y + (s.k + 2) - NAP.length * cs + cs };
     // the café house stands alone in the middle, below the sign
     var bwMax = W < 300 ? Math.round(W * 0.66) : Math.min(Math.round(W * 0.4), 190);
     var hh = clamp(yardTop - (sy + s.h) - 10, 50, 150);
@@ -128,7 +135,7 @@
     // depth scale (sc): smaller near the house, larger near the curb.
     var small = W < 300;
     doorX = house.x + Math.round(house.w * 0.1) + 5;
-    openStand = { x: doorX + 13, yb: yardTop + 4 };                             // on the porch slab, just right of the front door
+    openStand = { x: doorX + 18, yb: yardTop + 4 };                             // on the porch slab, just right of the front door
     var G, CG, Lu, Ru, rowY = [], topMin = yardTop + 10, aisle = 0;
     function spacing(roomy) {                                                    // walkway half-width, walkway-to-set gap, gap between columns (set units);
       WH = roomy ? 10 : 7; G = roomy ? 6 : 3; CG = roomy ? 18 : 5;               // roomy leaves aisles wide enough to walk through
@@ -170,7 +177,7 @@
     // a light pole in each bottom corner, each strung to the house
     var cpTop = Math.max(house.wallTop, house.slab - 6);
     cpoles = [{ x: 1, top: cpTop, base: H }, { x: W - 4, top: cpTop, base: H }];
-    statics = [[openStand.x - 11, openStand.yb - 19, openStand.x + 11, openStand.yb + 1]].concat(cpoles.map(function (c) { return [c.x - 1, c.top, c.x + 4, c.base]; }));
+    statics = [[openStand.x - 15, openStand.yb - 27, openStand.x + 15, openStand.yb + 1]].concat(cpoles.map(function (c) { return [c.x - 1, c.top, c.x + 4, c.base]; }));
     furn.forEach(function (f) { statics.push([f.x - 23 * f.k, f.yb - 26 * f.k, f.x + 23 * f.k, f.yb + 1]); });
     function free(b) { return b[0] >= 1 && b[2] <= W - 1 && !statics.some(function (s) { return overlap(b, s); }); }
     var y1 = rowY[0], k1 = sc(y1), gL = walkX(y1) - Lu * k1, gR = walkX(y1) + Ru * k1;
@@ -249,6 +256,7 @@
     for (i = 0; i < nS; i++) {
       var st = { x: Math.floor(R() * W), y: Math.floor(skyTop + R() * (sBot - skyTop)), b: R() < 0.06, ph: R() * 6.3 };
       if (st.x > sign.x - 3 && st.x < sign.x + sign.w + 3 && st.y > sign.y - 3 && st.y < sign.y + sign.h + 3) continue;   // not behind the sign
+      if (nap && st.x > nap.x - 3 && st.x < nap.x + 40 * nap.cs && st.y > nap.y - 14 * nap.cs && st.y < nap.y + NAP.length * nap.cs + 3) continue;   // or the sleeping cat and its Zzz
       stars.push(st);
     }
     clouds = []; var nC = Math.max(3, Math.round(W / 70));
@@ -290,13 +298,29 @@
       if (hw > 0 || Math.abs(y) < r) ctx.fillRect(Math.round(cx) - hw, Math.round(cy) + y, hw * 2 + 1, 1);
     }
   }
-  function glowDots(cx, cy, R, c, strength) {
-    ctx.fillStyle = c;
-    for (var y = -R; y <= R; y++) for (var x = -R; x <= R; x++) {
-      var d = Math.sqrt(x * x + y * y); if (d > R) continue;
-      var a = (1 - d / R) * strength, px = Math.round(cx) + x, py = Math.round(cy) + y;
-      if (a * 16 > BAYER[((py & 3) << 2) | (px & 3)] + 1) ctx.fillRect(px, py, 1, 1);
-    }
+  function softGlow(cx, cy, R, a, col) {
+    col = col || '255,190,110'; // smooth warm radial glow, same as the footer lanterns
+    if (a <= 0.01 || R < 1) return;
+    var g = ctx.createRadialGradient(cx, cy, 0.5, cx, cy, R);
+    g.addColorStop(0, 'rgba(' + col + ',' + Math.min(1, a).toFixed(3) + ')'); g.addColorStop(1, 'rgba(' + col + ',0)');
+    ctx.fillStyle = g; ctx.fillRect(Math.floor(cx - R), Math.floor(cy - R), Math.ceil(R * 2) + 1, Math.ceil(R * 2) + 1);
+  }
+  var lamps = [], litCv = document.createElement('canvas'), litCtx = litCv.getContext('2d');
+  function lampLit(x, yb, fn) { // figures near a lit table catch its warm light on the side facing the lantern
+    var k = sc(yb), cy = yb - 12 * k, near = P_.glow > 0.1 ? lamps.filter(function (l) { var dx = l.x - x, dy = l.y - cy; return dx * dx + dy * dy < l.r * l.r; }) : [];
+    if (!near.length) return fn();
+    if (litCv.width !== W || litCv.height !== H) { litCv.width = W; litCv.height = H; }
+    var bx = Math.max(0, Math.floor(x - 24 * k)), by = Math.max(0, Math.floor(yb - 36 * k)), bw = Math.min(W, Math.ceil(x + 24 * k)) - bx, bh = Math.min(H, Math.ceil(yb + 3)) - by;
+    if (bw <= 0 || bh <= 0) return fn();
+    var main = ctx; litCtx.clearRect(bx, by, bw, bh); ctx = litCtx; fn(); ctx = main;
+    litCtx.globalCompositeOperation = 'source-atop';
+    near.forEach(function (l) {
+      var g = litCtx.createRadialGradient(l.x, l.y, 0.5, l.x, l.y, l.r);
+      g.addColorStop(0, 'rgba(255,178,92,' + (0.5 * P_.glow).toFixed(3) + ')'); g.addColorStop(0.6, 'rgba(255,178,92,' + (0.18 * P_.glow).toFixed(3) + ')'); g.addColorStop(1, 'rgba(255,178,92,0)');
+      litCtx.fillStyle = g; litCtx.fillRect(bx, by, bw, bh);
+    });
+    litCtx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(litCv, bx, by, bw, bh, bx, by, bw, bh);
   }
   function sag(x1, y1, x2, y2, d, fn) {
     var n = Math.max(1, Math.round(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1))));
@@ -305,7 +329,7 @@
   function key4(K, f) { var u = Math.floor(f), a = f - u, A = K[u], B = K[u + 1]; return [A[0] + (B[0] - A[0]) * a, A[1] + (B[1] - A[1]) * a, A[2] + (B[2] - A[2]) * a]; }
   var SUN = [[0.88, 0.8, 9], [0.95, 1.35, 9], [0.88, 0.8, 9]];   // y is a share of sky-top → horizon, so the sunset sun sits low
   var MOON = [[0.1, 1.9, 5], [0.9, 0.6, 5], [0.96, 1.9, 5]];
-  var GLYPH = { C: [7, 4, 4, 4, 7], H: [5, 5, 7, 5, 5], I: [7, 2, 2, 2, 7], B: [6, 5, 6, 5, 6], R: [6, 5, 6, 5, 5], O: [7, 5, 5, 5, 7], P: [6, 5, 6, 4, 4], E: [7, 4, 6, 4, 7], N: [6, 5, 5, 5, 5] };
+  var GLYPH = { C: [7, 4, 4, 4, 7], H: [5, 5, 7, 5, 5], I: [7, 2, 2, 2, 7], B: [6, 5, 6, 5, 6], R: [6, 5, 6, 5, 5], O: [7, 5, 5, 5, 7], P: [6, 5, 6, 4, 4], E: [7, 4, 6, 4, 7], N: [6, 5, 5, 5, 5], Z: [7, 1, 2, 4, 7], L: [4, 4, 4, 4, 7], S: [7, 4, 7, 1, 7], D: [6, 5, 5, 5, 6] };
   function text(s, x, y, c, k) {
     k = k || 1; ctx.fillStyle = c;
     for (var i = 0; i < s.length; i++) { var g = GLYPH[s[i]]; for (var r = 0; r < 5; r++) for (var b = 0; b < 3; b++) if (g[r] >> (2 - b) & 1) ctx.fillRect(x + (i * 4 + b) * k, y + r * k, k, k); }
@@ -402,7 +426,7 @@
     rect(dx + 3, base - Math.round(dh * 0.45), dw - 3, 1, T('#7a4a30')); rect(dx + 3, base - Math.round(dh * 0.45) + 1, dw - 3, Math.round(dh * 0.45) - 4, T('#9a6440'));   // counter
     rect(dx, base - dh, 3, dh, T('#7a3a2a')); rect(dx + 2, base - dh, 1, dh, T('#5a2a1e')); rect(dx + 1, base - Math.round(dh * 0.5), 1, 1, T('#e0b060'));   // open door leaf
     var wx = dx + dw + 8, wW = Math.max(12, x + w - 6 - wx), wy = gy + 6, wH = Math.max(7, Math.round(gH * 0.44));
-    if (glow > 0.1) glowDots(wx + wW / 2, wy + wH / 2, Math.round(wW * 0.6), WARM, glow * 0.25);
+    if (glow > 0.1) softGlow(wx + wW / 2, wy + wH / 2, wW * 1.4, glow * 0.4);
     grilleWin(wx, wy, wW, wH, p, glow > 0.1 ? glow : 0, true);
     if (glow > 0.1) for (var lb = wx - 1; lb < wx + wW + 1; lb += 2) { rect(lb, wy - 1, 1, 1, WARM); rect(lb, wy + wH, 1, 1, WARM); }
     var ay = gy + 1, aw = w + 8;
@@ -428,7 +452,7 @@
     }
     rect(fL, ay + ad, fR - fL, 2, T('#7a2620')); rect(fL, ay + ad + 2, fR - fL, 1, 'rgba(44,26,18,0.3)');
     if (glow > 0.05) for (var ix = fL; ix < fR; ix += 3) { var len = 1 + ((ix * 7) % 3); for (var k = 0; k < len; k++) rect(ix, ay + ad + 2 + k, 1, 1, k === len - 1 ? WARM : 'rgba(255,233,168,0.4)'); }
-    if (glow > 0.1) { glowDots(dx + dw / 2, base + 2, Math.round(dw * 0.9), WARM, glow * 0.35); for (var sp = 0; sp < 4; sp++) rect(dx - sp, base + sp, dw + sp * 2, 1, 'rgba(255,214,130,' + (0.28 * glow * (1 - sp / 4)).toFixed(2) + ')'); }   // light spilling out
+    if (glow > 0.1) { softGlow(dx + dw / 2, base - 2, dw * 2, glow * 0.55); for (var sp = 0; sp < 4; sp++) rect(dx - sp, base + sp, dw + sp * 2, 1, 'rgba(255,214,130,' + (0.28 * glow * (1 - sp / 4)).toFixed(2) + ')'); }   // light spilling out
   }
 
   function drawRoof(h, p) { // a low hip roof whose eaves overhang toward the viewer: we see the fascia and the underside
@@ -445,6 +469,28 @@
     for (var dx = -o; dx <= o; dx++) for (var dy = -o; dy <= o; dy++) if (dx || dy) { text('CHIBIRO', x + dx, y + dy, T(OUT), k); text('CHIBIRO', x + sh + dx, y + sh + dy, T(OUT), k); }
     text('CHIBIRO', x + sh, y + sh, T('#b23a48'), k);
     text('CHIBIRO', x, y, css(lerpC([253, 246, 227], [255, 233, 168], glow)), k);
+  }
+
+  function drawNap(t, p) { // the sleeping cat: breathes slowly, with little Zs drifting up from its head
+    if (!nap) return;
+    var cs = nap.cs, bob = reduce ? 0 : Math.round(Math.sin(t * 0.0012)), x0 = nap.x, y0 = nap.y + bob, breath = !reduce && Math.sin(t * 0.0018) > 0.2 ? 1 : 0;
+    var L = function (h) { return css(lerpC(rgb(h), P_.c.tint, P_.tintA * 0.45)); }, C = { o: OUT, e: OUT, b: L('#e8a060'), s: L('#c67a3a'), t: L('#d88a48'), w: L('#fff3e0'), p: L('#f2a0a0'), n: L('#d06a6a'), k: L('#f2b0a0') };   // lit softly, like the sign
+    for (var r = 0; r < NAP.length; r++) for (var c = 0; c < NAP[r].length; c++) { var ch = NAP[r][c]; if (ch !== '.') { ctx.fillStyle = C[ch]; ctx.fillRect(x0 + c * cs, y0 + r * cs, cs, cs); } }
+    if (breath) for (c = 1; c < 16; c++) {                                                // on each breath the back swells: its outline rises a touch and fur fills in below, so nothing splits apart
+      for (r = 0; r < NAP.length && NAP[r][c] === '.'; r++);
+      if (r >= NAP.length - 1 || NAP[r][c] !== 'o') continue;
+      var d = Math.max(1, cs >> 1), below = NAP[r + 1][c];
+      ctx.fillStyle = C[below === '.' ? 'o' : below]; ctx.fillRect(x0 + c * cs, y0 + r * cs, cs, cs);
+      ctx.fillStyle = C.o; ctx.fillRect(x0 + c * cs, y0 + r * cs - d, cs, cs);
+    }
+    if (reduce) return;
+    for (var i = 0; i < 3; i++) {                                                         // three Zs rise and fade in turn
+      var ph = ((t / 2400) + i / 3) % 1, zk = Math.max(1, Math.round(cs * (0.5 + ph * 0.6)));
+      var zx = Math.round(x0 + 24 * cs + ph * 18 * cs), zy = Math.round(y0 - 1 * cs - ph * 7 * cs);   // drifting off to the right, clear of the buttons
+      ctx.globalAlpha = Math.max(0, Math.min(1, (1 - ph) * 1.6)) * (0.6 + 0.4 * (1 - p.glow * 0.3));
+      text('Z', zx, zy, css(lerpC([253, 246, 227], [255, 233, 168], p.glow)), zk);
+    }
+    ctx.globalAlpha = 1;
   }
 
   /* ---------- Yard ---------- */
@@ -529,13 +575,14 @@
       q.x = x; q.yb = f.yb; q.face = faces[sd];
       q.sipping = !reduce && Math.sin(t * 0.0011 + q.ph) > 0.82;
       var chat = f.who[0] && f.who[1] && !reduce && Math.floor(t / 2600 + f.seed) % 2 === sd;
-      drawPerson(q, t, { sip: q.sipping && !chat, mouth: chat && Math.floor(t / 200) % 2 === 0, gesture: chat && !q.sipping && Math.floor(t / 900) % 2 === 0, bubble: chat && Math.floor(t / 2600 + f.seed) % 4 < 2 && f.seed % 2 === 0 });
+      var po = { sip: q.sipping && !chat, mouth: chat && Math.floor(t / 200) % 2 === 0, gesture: chat && !q.sipping && Math.floor(t / 900) % 2 === 0, bubble: chat && Math.floor(t / 2600 + f.seed) % 4 < 2 && f.seed % 2 === 0 };
+      lampLit(x, f.yb, function () { drawPerson(q, t, po); });
     }
     if (f.kind === 'set') {
       drawRollTable(f.x, f.yb, p);
       cup(f.x - 2, f.yb - 15);
       for (sd = 0; sd < 2; sd++) if (f.who[sd] && !f.who[sd].sipping) cup(f.x + (sd ? 5 : -7), f.yb - 15);
-      if ((f.seed % 3 === 0) && p.glow > 0.1) { glowDots(f.x + Math.round(2 * f.k), f.yb - Math.round(14 * f.k), Math.max(3, Math.round(6 * f.k)), WARM, p.glow * 0.5); rect(f.x + 1, f.yb - 16, 2, 4, '#ffd06c'); }
+      if ((f.who[0] || f.who[1]) && p.glow > 0.1) rect(f.x + 1, f.yb - 16, 2, 4, '#ffd06c');
     }
     SC_ = null;
   }
@@ -611,7 +658,7 @@
     } else { o.sip = !reduce && Math.sin(t * 0.0009 + q.ph) > 0.8; o.cup = !o.sip; }
     var ax = Math.round(q.x), ay = Math.round(q.yb), dq = Object.create(q);
     dq.x = ax; dq.yb = ay; SC_ = { ax: ax, ay: ay, k: sc(q.yb) };
-    drawPerson(dq, t, o);
+    lampLit(ax, ay, function () { drawPerson(dq, t, o); });
     SC_ = null;
   }
 
@@ -688,18 +735,28 @@
     rect(f > 0 ? cx + 7 : cx - 8, by + 4 + pat, 2, 1, skin);                                                              // hand, patting
   }
 
-  function drawOpenStand(t, p) { // a neon OPEN sign on a little stand at the foot of the porch
-    var glow = p.glow, nW = 19, nH = 9, nX = openStand.x - 9, yb = openStand.yb, nY = yb - 18;
+  // Is the café open right now in Malaysia (UTC+8)? Tuesday to Sunday, 3:08 PM to 12:08 AM; closed all Monday (Sunday's night runs past midnight).
+  function cafeOpen() {
+    var d = new Date(Date.now() + 8 * 3600000), day = d.getUTCDay(), m = d.getUTCHours() * 60 + d.getUTCMinutes();
+    if (m >= 15 * 60 + 8) return day !== 1;
+    if (m < 8) return (day + 6) % 7 !== 1;
+    return false;
+  }
+  function drawOpenStand(t, p) { // a neon sign on a little stand at the foot of the porch: OPEN or CLOSED lights up, the other word stays dark
+    var glow = p.glow, nW = 27, nH = 16, nX = openStand.x - 13, yb = openStand.yb, nY = yb - 25, open = cafeOpen();
     var flick = reduce || Math.sin(t * 0.0031) > -0.96 || Math.floor(t / 70) % 2 === 0, on = 0.55 + 0.45 * glow;
-    if (glow > 0.1 && flick) { glowDots(nX + nW / 2, nY + nH / 2, 12, '#ff6a9a', glow * 0.32); glowDots(openStand.x, yb, 8, '#ff6a9a', glow * 0.18); }
+    var gc = open ? '255,90,160' : '255,74,58', gy = open ? nY + 4 : nY + 11;
+    if (glow > 0.1 && flick) { softGlow(nX + nW / 2, gy, 18, glow * 0.4, gc); softGlow(openStand.x, yb, 12, glow * 0.22, gc); }
     var leg = T('#4a4a52');
-    rect(nX + 3, nY + nH, 1, yb - nY - nH, leg); rect(nX + nW - 4, nY + nH, 1, yb - nY - nH, leg);              // stand legs
-    rect(nX + 1, yb - 1, 5, 1, leg); rect(nX + nW - 6, yb - 1, 5, 1, leg); rect(nX + 3, yb - 5, nW - 6, 1, leg);  // feet and crossbar
+    rect(nX + 4, nY + nH, 1, yb - nY - nH, leg); rect(nX + nW - 5, nY + nH, 1, yb - nY - nH, leg);              // stand legs
+    rect(nX + 2, yb - 1, 5, 1, leg); rect(nX + nW - 7, yb - 1, 5, 1, leg); rect(nX + 4, yb - 5, nW - 8, 1, leg);  // feet and crossbar
     rect(nX, nY, nW, nH, T('#1e1822'));
-    var tube = flick ? css(lerpC(rgb('#c0507a'), rgb('#ff5aa8'), on)) : T('#5a3a4a'), txt = flick ? css(lerpC(rgb('#d06a40'), rgb('#ff9a5a'), on)) : T('#5a3a3a');
+    var tube = flick ? css(lerpC(rgb(open ? '#c0507a' : '#b04040'), rgb(open ? '#ff5aa8' : '#ff5a4a'), on)) : T('#5a3a4a');
+    var lit = flick ? css(lerpC(rgb(open ? '#d06a40' : '#c03a30'), rgb(open ? '#ff9a5a' : '#ff6a50'), on)) : T('#5a3a3a'), dark = T('#43303a');
     rect(nX, nY, nW, 1, tube); rect(nX, nY + nH - 1, nW, 1, tube); rect(nX, nY, 1, nH, tube); rect(nX + nW - 1, nY, 1, nH, tube);
-    text('OPEN', nX + 2, nY + 2, txt, 1);
-    rect(nX + 9, nY - 2, 1, 2, T('#2a2624'));                                                                     // power cord to the house
+    text('OPEN', nX + 6, nY + 2, open ? lit : dark, 1);
+    text('CLOSED', nX + 2, nY + 9, open ? dark : lit, 1);
+    rect(nX + 13, nY - 2, 1, 2, T('#2a2624'));                                                                    // power cord to the house
   }
 
   function drawCornerPoles(p) { // taller, thicker poles up front: wood post, a cap and a bracket for the strand
@@ -715,7 +772,7 @@
       sag(s[0], s[1], s[2], s[3], s[4], function (x, y, i) {
         if (i % 4 === 0) {
           var tw = reduce ? 1 : 0.75 + 0.25 * Math.sin(t * 0.005 + i * 1.3 + si);
-          if (on) { if (p.glow > 0.5 && i % 8 === 0) { ctx.fillStyle = 'rgba(255,200,110,' + (0.18 * p.glow).toFixed(2) + ')'; ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); } rect(x, y, 1, 1, 'rgba(255,236,176,' + (0.35 + 0.65 * p.glow * tw).toFixed(2) + ')'); }
+          if (on) { if (p.glow > 0.3 && i % 8 === 0) softGlow(x + 0.5, y + 0.5, 9, 0.42 * p.glow * tw); rect(x, y, 1, 1, 'rgba(255,236,176,' + (0.35 + 0.65 * p.glow * tw).toFixed(2) + ')'); }
           else rect(x, y, 1, 1, 'rgba(250,246,232,0.55)');
         } else if (i % 2 === 0) rect(x, y, 1, 1, wire);
       });
@@ -777,11 +834,14 @@
     drawGrounds(p);
     drawFences(p);
     drawHouse(t, p);
+    lamps = scene.filter(function (it) { return it.f && it.f.kind === 'set' && (it.f.who[0] || it.f.who[1]); }).map(function (it) { var f = it.f; return { x: f.x + 2 * f.k, y: f.yb - 13 * f.k, r: 34 * f.k }; });
+    if (p.glow > 0.1) lamps.forEach(function (l) { softGlow(l.x, l.y, l.r, 0.6 * p.glow); });   // lantern light on the ground, under every set so it never washes over nearer ones
     scene.sort(function (m, n) { return (m.q ? m.q.yb : m.yb) - (n.q ? n.q.yb : n.yb); });   // walkers move in depth, so re-sort each frame
     scene.forEach(function (it) { if (it.sign) drawOpenStand(t, p); else if (it.tent) drawTent(p); else if (it.f) drawFurniture(it.f, p, t); else drawStander(it.q, t, dt); });
     drawCornerPoles(p);
     drawStrands(reduce ? 0 : t, p);
     drawSign(reduce ? 0 : t, p);
+    drawNap(reduce ? 0 : t, p);
     if (p.birds > 0.05 && !reduce) {
       ctx.globalAlpha = p.birds * (1 - p.stars);
       birds.forEach(function (bd) {

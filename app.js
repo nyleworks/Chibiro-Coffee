@@ -88,12 +88,81 @@
   if (small.addEventListener) small.addEventListener('change', function () { page = 0; renderMenu(); });
   renderMenu();
 
-  /* ---------- Perks (PRD 4.3, section 4) ---------- */
-  var PERKS = ['Specialty Home-Brewed Coffee', 'Late-Night Hours until 12:08 AM', 'Free Wi-Fi', 'Indoor & Outdoor Seating',
-    'Family-Friendly Space', 'Gender-Neutral Restrooms', 'Free Parking Lot & Street Parking'];
-  $('perks').innerHTML = PERKS.map(function (p, i) {
-    return '<div class="cb-perk"><span class="cb-perk__no" aria-hidden="true">0' + (i + 1) + '</span><h3 class="cb-perk__title">' + esc(p) + '</h3></div>';
+  /* ---------- Photo Dump (section 4): the owner's 10 featured customer photos, pegged to a string ---------- */
+  // To feature a photo: put the file in assets/photos/ and fill in src, by (the poster's Instagram handle) and alt.
+  // An entry with no src shows a pixel placeholder.
+  var PHOTOS = [
+    { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' },
+    { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }
+  ];
+  function placeholder(i) {                                 // a little 20×25 pixel picture: a latte, a cat, a plant, a moon or a heart
+    var bgs = ['#f9d5d0', '#dce8b8', '#e8d3a6', '#c9d8ee', '#f4e4c1'], ink = '#6b4a3a', px = [];
+    function r(x, y, w, h, c) { px.push('<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + c + '"/>'); }
+    r(0, 0, 20, 25, bgs[i % 5]); r(0, 18, 20, 7, 'rgba(44,26,18,0.08)');
+    var m = i % 5;
+    if (m === 0) { r(5, 10, 9, 8, '#fffdf7'); r(14, 12, 2, 1, '#fffdf7'); r(15, 13, 1, 2, '#fffdf7'); r(14, 15, 2, 1, '#fffdf7'); r(6, 10, 7, 2, '#c08a5a'); r(9, 10, 1, 1, '#fffdf7'); r(4, 18, 11, 1, ink); r(7, 6, 1, 3, 'rgba(107,74,58,0.4)'); r(10, 5, 1, 3, 'rgba(107,74,58,0.4)'); }
+    else if (m === 1) { r(5, 9, 10, 8, '#e8a060'); r(5, 7, 2, 2, '#e8a060'); r(13, 7, 2, 2, '#e8a060'); r(7, 12, 1, 1, ink); r(12, 12, 1, 1, ink); r(9, 14, 2, 1, '#d06a6a'); r(6, 17, 8, 2, '#e8a060'); }
+    else if (m === 2) { r(7, 15, 6, 4, '#c0603a'); r(6, 14, 8, 1, '#a04a2a'); r(9, 7, 2, 7, '#4a6b14'); r(6, 8, 3, 2, '#6b8e23'); r(11, 6, 3, 2, '#6b8e23'); r(5, 11, 4, 2, '#6b8e23'); r(11, 10, 4, 2, '#6b8e23'); }
+    else if (m === 3) { r(0, 0, 20, 18, '#2c3064'); r(11, 4, 5, 5, '#f6eed2'); r(10, 5, 1, 3, '#f6eed2'); r(12, 5, 2, 2, '#2c3064'); r(3, 3, 1, 1, '#fff'); r(6, 9, 1, 1, '#fff'); r(16, 12, 1, 1, '#fff'); r(0, 18, 20, 7, '#3a4a2a'); }
+    else { r(5, 8, 4, 3, '#e57373'); r(11, 8, 4, 3, '#e57373'); r(4, 9, 12, 3, '#e57373'); r(5, 12, 10, 2, '#e57373'); r(7, 14, 6, 2, '#e57373'); r(9, 16, 2, 1, '#e57373'); r(6, 9, 1, 1, '#f9d5d0'); }
+    return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 25" shape-rendering="crispEdges">' + px.join('') + '</svg>');
+  }
+  $('photoList').innerHTML = PHOTOS.map(function (ph, i) {
+    var no = (i < 9 ? '0' : '') + (i + 1), src = ph.src || placeholder(i);
+    return '<li class="photo"><span class="photo__pin" aria-hidden="true"></span><figure class="photo__frame">' +
+      '<img class="photo__img' + (ph.src ? '' : ' is-placeholder') + '" src="' + esc(src) + '" alt="' + esc(ph.src ? (ph.alt || 'Customer photo ' + no) : 'Placeholder for featured photo ' + no) + '" width="160" height="200" loading="lazy" decoding="async">' +
+      '<figcaption class="photo__cap"><span>No. ' + no + '</span><span>' + esc(ph.by || '@your.handle') + '</span></figcaption></figure></li>';
   }).join('');
+  (function () {                                            // the string: pixel steps that dip between pegs and rise to each peg
+    var track = $('photoTrack'), list = $('photoList'), cv = $('photoString'), g = cv.getContext('2d');
+    function drawString() {                                 // the whole line sags under the photos' weight, deepest in the middle, with a small dip between pegs
+      var lis = list.children; if (!lis.length) return;
+      var w = track.scrollWidth, P = 3, y0 = 27, ox = list.offsetLeft, pins = [].map.call(lis, function (li) { return ox + li.offsetLeft + li.offsetWidth / 2; });
+      var L = Math.min(-40, pins[0] - 240), R = Math.max(w + 40, pins[pins.length - 1] + 240), D = innerWidth < 768 ? 72 : 120;
+      function sagY(x) { var t = (x - L) / (R - L); return y0 + D * 4 * t * (1 - t); }
+      pins.forEach(function (x, i) { var m = Math.round((sagY(x) - y0) / P) * P + 'px'; if (lis[i].style.marginTop !== m) lis[i].style.marginTop = m; });
+      var h = y0 + D + 24; cv.width = w; cv.height = h; cv.style.width = w + 'px'; cv.style.height = h + 'px';
+      g.clearRect(0, 0, w, h); g.fillStyle = '#2c1a12';
+      var pts = [L].concat(pins, [R]);
+      for (var s = 0; s < pts.length - 1; s++) {
+        var a = pts[s], b = pts[s + 1], d = Math.min(10, (b - a) * 0.04), ya = Math.round((sagY(a) - y0) / P) * P + y0, yb = Math.round((sagY(b) - y0) / P) * P + y0;
+        if (s === 0 || s === pts.length - 2) { ya = sagY(a); yb = sagY(b); d = 0; }
+        for (var x = Math.max(0, Math.floor(a / P) * P); x < Math.min(w, b); x += P) {
+          var t = (x + P / 2 - a) / (b - a); g.fillRect(x, Math.round((ya + (yb - ya) * t + d * 4 * t * (1 - t)) / P) * P, P, P);
+        }
+      }
+    }
+    if ('ResizeObserver' in window) new ResizeObserver(drawString).observe(list); else window.addEventListener('resize', drawString);
+    drawString();
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-photos]'); if (!b) return;
+      var step = list.children[1] ? list.children[1].offsetLeft - list.children[0].offsetLeft : 240;
+      track.scrollBy({ left: +b.dataset.photos * step * 2, behavior: reduce ? 'auto' : 'smooth' });
+    });
+    function arrows() { var m = track.scrollWidth - track.clientWidth - 2; document.querySelector('.photo-line__btn--prev').disabled = track.scrollLeft <= 2; document.querySelector('.photo-line__btn--next').disabled = track.scrollLeft >= m; }
+    track.addEventListener('scroll', arrows, { passive: true }); window.addEventListener('resize', arrows); arrows();
+    // each photo swings a little from its peg; scrolling sideways shoves them, and they swing harder before settling back
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var sw = [].map.call(list.children, function (li, i) { return { el: li, a: 0, v: 0, ph: i * 1.7, last: '' }; });
+    var lastX = track.scrollLeft, lastT = 0, kick = 0, onScreen = false, looping = false;
+    track.addEventListener('scroll', function () { var dx = track.scrollLeft - lastX; lastX = track.scrollLeft; kick += dx; start(); }, { passive: true });
+    function start() { if (!looping && onScreen) { looping = true; lastT = performance.now(); requestAnimationFrame(swing); } }
+    function swing(t) {
+      var dt = Math.min(50, t - lastT) / 1000; lastT = t;
+      var push = Math.max(-60, Math.min(60, kick)); kick = 0;
+      sw.forEach(function (p) {
+        var idle = Math.sin(t / 1000 * 1.3 + p.ph) * 1.2;                    // a slight breeze sway, in degrees
+        p.v += -push * (0.5 + 0.12 * Math.sin(p.ph));                    // the line is dragged one way, the photos lag behind
+        p.v += ((idle - p.a) * 26 - p.v * 2.6) * dt;                          // spring back toward the gentle sway, with damping
+        p.a = Math.max(-14, Math.min(14, p.a + p.v * dt));
+        var r = 'rotate(' + p.a.toFixed(2) + 'deg)';
+        if (r !== p.last) { p.el.style.transform = r; p.last = r; }
+      });
+      if (onScreen) requestAnimationFrame(swing); else looping = false;
+    }
+    if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { onScreen = es[0].isIntersecting; start(); }).observe(track);
+    else { onScreen = true; start(); }
+  })();
 
   /* ---------- Smooth-scroll links ---------- */
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -742,6 +811,7 @@
 
   /* ---------- Five-cat engine (PRD 4.1 – 4.2) ---------- */
   var layer = $('cats'), stage = $('stage'), hero = $('top'), yarnEl = $('yarn');
+  hero.appendChild(layer);                                  // the cat layer lives inside the hero, so it scrolls with the yard natively (no lag or jitter)
   var HEART = 'assets/heart.svg', NOTE = 'assets/note.svg';
   var sound = false;
   // ease = how fast each cat closes on its target; bounce = extra hop in px while walking
@@ -860,7 +930,7 @@
 
   function frame(t) {
     var dt = Math.min(48, t - prev || 16.7) / 16.7; prev = t;
-    var W = window.innerWidth, H = window.innerHeight;
+    var W = window.innerWidth, H = window.innerHeight, hr = hero.getBoundingClientRect(), hx = hr.left, hy = hr.top;   // positions are worked out in the viewport, then drawn relative to the hero
     var mobile = W < 768, inHero = playful;      // the cats live in the hero yard and scroll away with it
     var s = mobile ? (inHero ? 32 : 48) : (inHero ? 48 : 64), gap = mobile ? 2 : 12, ledge = 8;
     var n = cats.length, packW = n * s + (n - 1) * gap;
@@ -889,7 +959,7 @@
       var ys = Math.round(s * 0.3 * SCL(yarn.ay));
       yarnEl.style.display = 'block';
       if (yarnEl._s !== ys) { yarnEl._s = ys; yarnEl.style.width = yarnEl.style.height = ys + 'px'; yarnEl.style.borderWidth = Math.max(2, Math.round(ys / 6)) + 'px'; }
-      yarnEl.style.transform = 'translate3d(' + Math.round(Rc.left + yarn.ax * Pp - ys / 2) + 'px,' + Math.round(Rc.top + yarn.ay * Pp - ys) + 'px,0)';
+      yarnEl.style.transform = 'translate3d(' + Math.round(Rc.left - hx + yarn.ax * Pp - ys / 2) + 'px,' + Math.round(Rc.top - hy + yarn.ay * Pp - ys) + 'px,0)';
     } else { yarnEl.style.display = 'none'; G = G && inHero ? G : null; cats.forEach(function (c) { c.ready = false; }); }
     var catBoxes = [];
     if (SC && SC.pets) while (SC.pets.length) { var pc = cats[SC.pets.shift()]; if (pc) petCat(pc, 3000); }
@@ -972,7 +1042,7 @@
 
       var bob = moving && c.bounce ? (step % 4 < 2 ? -c.bounce : 0) : 0;
       var y = c.y + bob;
-      c.el.style.transform = 'translate3d(' + Math.round(c.x) + 'px,' + Math.round(y) + 'px,0)';
+      c.el.style.transform = 'translate3d(' + Math.round(c.x - hx) + 'px,' + Math.round(y - hy) + 'px,0)';
     });
     if (info && info.W && yarn.ready && !yarn.path.length && t > yarn.kickCool) cats.some(function (c) {   // a cat touching the ball bats it away
       if (!c.ready || !hit(catBox(c.ax, c.ay), [yarn.ax - 3, yarn.ay - 5, yarn.ax + 3, yarn.ay + 1])) return false;
@@ -991,10 +1061,6 @@
       return true;
     });
     if (SC) SC.cats = catBoxes;
-    // only show the cats inside the hero, below the sticky nav, so they never ride along with the page
-    var hr = hero.getBoundingClientRect(), nb = navEl ? Math.max(0, navEl.getBoundingClientRect().bottom) : 0;
-    var clip = 'inset(' + Math.round(Math.max(0, hr.top, nb)) + 'px 0 ' + Math.round(Math.max(0, H - hr.bottom)) + 'px 0)';
-    if (clip !== layer._clip) { layer._clip = clip; layer.style.clipPath = clip; layer.style.visibility = hr.bottom <= nb ? 'hidden' : ''; }
     // light the cats like the scene: as they are at sunset, softly darker (and a touch cooler) at night; normal outside the hero
     var nt = info && info.W && SC.night ? Math.round(SC.night * 50) / 50 : 0;
     if (nt !== lastNight) {
