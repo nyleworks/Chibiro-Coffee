@@ -6,7 +6,7 @@
 
   /* ---------- Menu: Drinks / Snacks pages, 4×4 cards per page (2×4 on phones) ---------- */
   // t: 'i' iced, 'h' hot. Merged from the café's menu screenshots with duplicates removed.
-  var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
+  var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   // each shelf holds categories; item = [name, description, price (null = ask), 'i' iced / 'h' hot, badge]
   var MENU = {
     drinks: [
@@ -89,8 +89,10 @@
   renderMenu();
 
   /* ---------- Photo Dump (section 4): the owner's 10 featured customer photos, pegged to a string ---------- */
-  // To feature a photo: put the file in assets/photos/ and fill in src, by (the poster's Instagram handle) and alt.
-  // An entry with no src shows a pixel placeholder.
+  // To feature a photo: put the file in assets/photos/ and fill in src (e.g. 'assets/photos/01.jpg'), by (the poster's
+  // Instagram handle) and alt. An entry with no src shows a pixel placeholder.
+  // Before adding one: ask the poster first, and save the photo again with its location (GPS) data removed. Only files in
+  // assets/photos/ are shown: links to Instagram or other sites are ignored (and the site's security policy blocks them).
   var PHOTOS = [
     { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' },
     { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }, { src: '', by: '', alt: '' }
@@ -108,9 +110,9 @@
     return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 25" shape-rendering="crispEdges">' + px.join('') + '</svg>');
   }
   $('photoList').innerHTML = PHOTOS.map(function (ph, i) {
-    var no = (i < 9 ? '0' : '') + (i + 1), src = ph.src || placeholder(i);
+    var own = /^assets\/photos\/[\w.-]+$/.test(ph.src || ''), no = (i < 9 ? '0' : '') + (i + 1), src = own ? ph.src : placeholder(i);
     return '<li class="photo"><span class="photo__pin" aria-hidden="true"></span><figure class="photo__frame">' +
-      '<img class="photo__img' + (ph.src ? '' : ' is-placeholder') + '" src="' + esc(src) + '" alt="' + esc(ph.src ? (ph.alt || 'Customer photo ' + no) : 'Placeholder for featured photo ' + no) + '" width="160" height="200" loading="lazy" decoding="async">' +
+      '<img class="photo__img' + (own ? '' : ' is-placeholder') + '" src="' + esc(src) + '" alt="' + esc(own ? (ph.alt || 'Customer photo ' + no) : 'Placeholder for featured photo ' + no) + '" width="160" height="200" loading="lazy" decoding="async">' +
       '<figcaption class="photo__cap"><span>No. ' + no + '</span><span>' + esc(ph.by || '@your.handle') + '</span></figcaption></figure></li>';
   }).join('');
   (function () {                                            // the string: pixel steps that dip between pegs and rise to each peg
@@ -385,10 +387,10 @@
      Paste the two web app links (both end in /exec) here. While STAMP_API is empty the card runs in a
      preview mode that only lives in this browser, so the design can be tried out. */
   var STAMP_API = 'https://script.google.com/macros/s/AKfycbwR8Z7vlQEVyXehefGOcjkERVbE7l9H5FrJ0IwzMyVmkzl7V-aPuUicSdaz9dba1ZXx/exec';     // public deployment ("Who has access: Anyone"): looks up a card's stamps
-  var STAMP_STAFF = 'https://script.google.com/macros/s/AKfycbzCwCftbNpsDwIqmo1EqXWAJ1WeKWnyd1YudxPhTHwZ08Os7h2pCUfgBEONVk77mDHw/exec';   // staff deployment ("Who has access: Only myself"): the staff page
+  var STAMP_STAFF = 'https://script.google.com/macros/s/AKfycbzCwCftbNpsDwIqmo1EqXWAJ1WeKWnyd1YudxPhTHwZ08Os7h2pCUfgBEONVk77mDHw/exec';   // staff deployment ("Who has access: Only myself"): the staff page. Also in staff.js: keep the two the same.
   (function () {
     var cardEl = document.getElementById('stampCard'), side = document.getElementById('stampSide'); if (!cardEl || !side) return;
-    var SIZE = 10, CARD_KEY = 'chibiro-card', STAFF_KEY = 'chibiro-staff-phone', DEMO_KEY = 'chibiro-card-demo', TZ = 'Asia/Kuching';
+    var SIZE = 10, CARD_KEY = 'chibiro-card', PREV_KEY = 'chibiro-card-previous', STAFF_KEY = 'chibiro-staff-phone', DEMO_KEY = 'chibiro-card-demo', TZ = 'Asia/Kuching';
     var CATNAMES = ['Calico', 'Orange Tabby', 'Siamese', 'Tuxedo', 'Scottish Fold', 'Black Cat', 'Tortoiseshell', 'Grey Tabby', 'Snow', 'Ginger & White'];
     var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var demo = !STAMP_API;
@@ -405,7 +407,7 @@
 
     // ---- arriving from a scanned QR code (#card=…) or the café phone set-up link (#staff-phone=on|off) ----
     var hash = new URLSearchParams(location.hash.slice(1)), query = new URLSearchParams(location.search);
-    var scanned = hash.get('card') || query.get('card'), staffSetting = hash.get('staff-phone');
+    var scanned = hash.get('card'), staffSetting = hash.get('staff-phone');   // only #card=: the part after # never leaves the phone
     if (validCode(scanned) && STAMP_STAFF && load(STAFF_KEY) === '1') { location.replace(STAMP_STAFF + '?card=' + encodeURIComponent(scanned)); return; }
 
     var state = { code: load(CARD_KEY), card: null, msg: null, fresh: [], error: false, paused: false };
@@ -431,7 +433,15 @@
       if (demo) return Promise.resolve(demoCard());
       // A plain-text POST keeps this a "simple" request, which Apps Script web apps accept from any site
       return fetch(STAMP_API, { method: 'POST', body: JSON.stringify({ action: 'card', card: state.code }), redirect: 'follow' })
-        .then(function (r) { return r.json(); }).then(function (r) { return r && r.ok ? r.card : null; }).catch(function () { return null; });
+        .then(function (r) { return r.json(); }).then(function (r) { return r && r.ok ? norm(r.card) : null; }).catch(function () { return null; });
+    }
+    // The page only ever shows plain numbers, dates and a yes/no from the server, whatever it sends
+    function norm(c) {
+      if (!c || typeof c !== 'object') return null;
+      var whole = function (v, max) { v = Math.floor(Number(v)) || 0; return Math.max(0, Math.min(max, v)); };
+      return { member: whole(c.member, 999999), stamps: whole(c.stamps, SIZE), size: SIZE,
+        dates: Array.isArray(c.dates) ? c.dates.slice(0, SIZE).map(function (d) { return String(d).slice(0, 10); }) : [],
+        expires: typeof c.expires === 'string' ? c.expires.slice(0, 30) : null, stampedToday: c.stampedToday === true, freeDrinks: whole(c.freeDrinks, 999999) };
     }
     function apply(card) {
       if (!card) { state.error = true; return true; }
@@ -481,7 +491,7 @@
         h += '<li class="' + cls + '" title="' + esc(CATNAMES[i]) + '"><img class="stamp-head" src="' + headURL(i) + '" alt="" width="20" height="20">' +
           (on ? '<span class="stamp-slot__date">' + esc(short(c.dates[i] || '')) + '</span>' : last ? '<span class="stamp-slot__free">Free<br>Drink</span>' : '<span class="stamp-slot__num">' + (i + 1) + '</span>') + '</li>';
       }
-      h += '</ol><div class="stamp-card__foot"><div class="stamp-meter"><span style="width:' + (n / SIZE * 100) + '%"></span></div>';
+      h += '</ol><div class="stamp-card__foot"><div class="stamp-meter"><span data-fill="' + Math.round(n / SIZE * 100) + '"></span></div>';
       h += '<p class="stamp-card__count"><b>' + n + '/' + SIZE + '</b> · ' + (n >= SIZE ? 'your free drink is ready!' : (SIZE - n) + ' more cat' + (SIZE - n > 1 ? 's' : '') + ' to a free drink') + '</p>';
       if (c.expires) h += '<p class="stamp-card__exp">Expires <b>' + esc(longDate(c.expires)) + '</b> · one month after the last stamp</p>';
       else if (n >= SIZE) h += '<p class="stamp-card__exp">Show your QR code at the counter to claim it.</p>';
@@ -491,15 +501,17 @@
     var LOGO = (document.querySelector('.cb-nav__brand img') || {}).src || '';
     var SAMPLE = { member: 308, stamps: 6, dates: ['2026-11-03', '2026-11-05', '2026-11-07', '2026-11-10', '2026-11-12', '2026-11-16'], expires: '2026-12-16T15:59:59Z', freeDrinks: 0 };
     var sideHTML = side.innerHTML;
+    function fill() { [].forEach.call(cardEl.querySelectorAll('[data-fill]'), function (s) { s.style.width = s.dataset.fill + '%'; }); }
     function render() {
       if (!state.code) {                                  // no card yet: the sample card and how it works
-        cardEl.innerHTML = cardHTML(SAMPLE, true); cardEl.classList.add('is-sample');
+        cardEl.innerHTML = cardHTML(SAMPLE, true); cardEl.classList.add('is-sample'); fill();
         if (side.dataset.mode !== 'intro') { side.innerHTML = sideHTML; side.dataset.mode = 'intro'; }
         return;
       }
       cardEl.classList.remove('is-sample');
       var c = state.card;
       cardEl.innerHTML = c ? cardHTML(c) : '<p class="stamp-wait">' + (state.error ? 'Couldn\'t check your card. Check your internet and try again.' : 'Loading your card…') + '</p>';
+      fill();
       var h = '<h3 class="stamp-how__title">Your card</h3>';
       if (demo) h += '<p class="stamp-demo"><b>Preview mode.</b> Not linked to the Google Sheet yet, so this card only lives in this browser. Tap the button under the QR code to see a stamp land.</p>';
       if (state.msg) h += '<p class="stamp-msg' + (state.msg.ok ? ' stamp-msg--ok' : '') + '" role="status">' + esc(state.msg.text) + '</p>';
@@ -509,33 +521,47 @@
       if (demo) h += '<button class="cb-btn cb-btn--plain" type="button" data-stamp="demo">' + (c && c.stamps >= SIZE ? 'Preview: give the free drink' : 'Preview: add a stamp') + '</button>';
       else h += state.paused || state.error ? '<button class="stamp-link" type="button" data-stamp="check">Check for stamps</button>' : '<p class="stamp-live"><span class="stamp-live__dot" aria-hidden="true"></span>Live: new stamps appear here</p>';
       h += '<p class="stamp-small">Keep a screenshot of this card. If your phone ever loses it, scan the screenshot with your camera to bring it back.</p>' +
-        '<div class="stamp-links"><button class="stamp-link" type="button" data-stamp="copy">Copy my card link</button><button class="stamp-link" type="button" data-stamp="paste">Paste a card link</button></div>' +
+        '<div class="stamp-links"><button class="stamp-link" type="button" data-stamp="copy">Copy my card link</button><button class="stamp-link" type="button" data-stamp="paste">Paste a card link</button>' +
+        (validCode(load(PREV_KEY)) && load(PREV_KEY) !== state.code ? '<button class="stamp-link" type="button" data-stamp="back">Switch back to my other card</button>' : '') + '</div>' +
         '<p class="stamp-small">No sign-up. We don\'t ask for your name or phone number.</p>';
       side.innerHTML = h; side.dataset.mode = 'card';
       state.fresh = [];
     }
 
     // ---- live updates while the stamp card is on screen ----
-    var poll = { timer: 0, until: 0, busy: false }, onScreen = false;
-    function startLive() { poll.until = Date.now() + 3 * 60000; if (state.paused) { state.paused = false; render(); } clearTimeout(poll.timer); check(); }
+    // Gentle on the Google script (it allows only about 30 lookups at once, shared with the staff page):
+    // ask every 6 s for the first minute, then every 12 s, and pause after 2 minutes until the customer taps "Check".
+    var poll = { timer: 0, until: 0, from: 0, busy: false }, onScreen = false;
+    function startLive() { poll.from = Date.now(); poll.until = poll.from + 2 * 60000; if (state.paused) { state.paused = false; render(); } clearTimeout(poll.timer); check(); }
     function check() {
       if (poll.busy || !state.code) return; poll.busy = true;
       fetchCard().then(function (card) {
         poll.busy = false; if (apply(card)) render(); clearTimeout(poll.timer);
         if (demo || !onScreen || document.hidden) return;
         if (Date.now() > poll.until) { state.paused = true; render(); return; }
-        poll.timer = setTimeout(check, 3000);
+        poll.timer = setTimeout(check, Date.now() - poll.from < 60000 ? 6000 : 12000);
       });
     }
     if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { var was = onScreen; onScreen = es[0].isIntersecting; if (onScreen && !was && state.code) startLive(); }).observe(cardEl);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && onScreen && state.code) startLive(); });
 
     function say(text, ok) { state.msg = { text: text, ok: ok }; render(); }
+    // A card link or a pasted link only replaces this phone's card after asking. The card it replaces is kept,
+    // so "Switch back to my other card" can bring it back. Returns true when the new card is now in use.
+    function switchTo(code) {
+      if (code === state.code) { state.msg = { text: 'This card is already on this phone.', ok: true }; return false; }
+      if (state.code && !window.confirm('This phone already has a Chibiro stamp card.\n\nSwap to the card from this link? Your card stays saved on this phone, so you can switch back.')) {
+        state.msg = { text: 'Kept your own card. Nothing changed.', ok: true }; return false;
+      }
+      if (state.code) store(PREV_KEY, state.code);
+      state.code = code; store(CARD_KEY, code); state.card = null; return true;
+    }
     document.getElementById('stamps').addEventListener('click', function (e) {
       var b = e.target.closest('[data-stamp]'); if (!b) return;
       var act = b.dataset.stamp;
       if (act === 'get') { state.code = newCode(); store(CARD_KEY, state.code); state.card = null; state.msg = { text: 'Your card is ready! Show the QR code when you order.', ok: true }; render(); startLive(); }
       else if (act === 'check') { state.msg = null; startLive(); }
+      else if (act === 'back') { var prev = load(PREV_KEY); if (validCode(prev)) { store(PREV_KEY, state.code); state.code = prev; store(CARD_KEY, prev); state.card = null; say('Switched back to your other card.', true); startLive(); } }
       else if (act === 'demo') { var before = state.card; state.card = before; apply(demoStamp()); render(); }
       else if (act === 'copy') {
         var link = cardLink(state.code);
@@ -545,7 +571,7 @@
         var use = function (text) {
           var m = /card=([A-Za-z0-9_-]{22})/.exec(text || '');
           if (!m) { say('That isn\'t a card link. Open your card in the other browser and tap “Copy my card link” first.', false); return; }
-          state.code = m[1]; store(CARD_KEY, m[1]); state.card = null; say('Your card is back on this phone.', true); startLive();
+          if (switchTo(m[1])) { say('This card is now on this phone.', true); startLive(); } else render();
         };
         if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(use, function () { use(window.prompt('Paste your card link here:')); });
         else use(window.prompt('Paste your card link here:'));
@@ -556,10 +582,11 @@
     if (scanned || staffSetting) { query.delete('card'); var qs = query.toString(); history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + '#stamps'); }
     if (staffSetting === 'on' || staffSetting === 'off') {
       store(STAFF_KEY, staffSetting === 'on' ? '1' : null);
-      state.msg = { text: staffSetting === 'on' ? 'This phone is now the café phone. Scanning a customer\'s card will open the staff page.' : 'This phone is no longer the café phone.', ok: true };
+      state.msg = { text: staffSetting === 'on' ? 'This phone is now the café phone. Scan cards with the staff scanner (staff.html on this site), not the camera app.' : 'This phone is no longer the café phone.', ok: true };
       if (!state.code) state.code = newCode(), store(CARD_KEY, state.code);
     } else if (validCode(scanned) && scanned !== state.code) {
-      state.code = scanned; store(CARD_KEY, scanned); state.card = null; state.msg = { text: 'Your card is back on this phone.', ok: true };
+      var had = !!state.code;
+      if (switchTo(scanned)) state.msg = { text: had ? 'This card is now on this phone.' : 'Your card is back on this phone.', ok: true };
     }
     render();
     if (state.code) fetchCard().then(function (card) { if (apply(card)) render(); });

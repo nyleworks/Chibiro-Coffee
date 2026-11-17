@@ -1,4 +1,9 @@
 /**
+ * @OnlyCurrentDoc
+ * (Lets this script open only the Google Sheet it is attached to, never your other files.)
+ */
+
+/**
  * Chibiro Coffee: Cat Stamp Card backend (Google Apps Script, bound to a Google Sheet).
  * Built on the same system as the Chillbah Route Card, with Chibiro's own rules and look.
  *
@@ -238,7 +243,9 @@ function doGet(e) {
 // POST from the website: the only public action is looking up a card by its code.
 function doPost(e) {
   try {
-    var req = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+    var body = (e && e.postData && e.postData.contents) || "{}";
+    if (body.length > 200) return json_({ ok: false, error: "bad_request" });   // a real lookup is about 60 characters
+    var req = JSON.parse(body);
     if (req.action === "card") return json_(lookup_(req.card));
     return json_({ ok: false, error: "bad_request" });
   } catch (err) {
@@ -251,11 +258,19 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+// Each answer is kept for a few seconds, so a busy café (or someone hammering the link) reads the sheet far less.
+// Staff actions clear the card's saved answer straight away, so a new stamp still shows at once.
+var LOOKUP_CACHE_SECONDS = 5;
 function lookup_(code) {
   if (!validCode_(code)) return { ok: false, error: "bad_card" };
-  var found = findCard_(cardsSheet_(), fingerprint_(code));
-  return { ok: true, card: view_(found ? found.data : blankCard_("")) };
+  var id = fingerprint_(code), cache = CacheService.getScriptCache(), saved = cache.get("v:" + id);
+  if (saved) return JSON.parse(saved);
+  var found = findCard_(cardsSheet_(), id);
+  var out = { ok: true, card: view_(found ? found.data : blankCard_("")) };
+  cache.put("v:" + id, JSON.stringify(out), LOOKUP_CACHE_SECONDS);
+  return out;
 }
+function forget_(code) { CacheService.getScriptCache().remove("v:" + fingerprint_(code)); }
 
 // ---------------------------------------------------------------------------------------------------------
 // Staff actions, called from the staff page with google.script.run. Each one checks the signed-in account.
@@ -272,7 +287,7 @@ function staffCard(code) {
 function staffStamp(code) {
   requireStaff_();
   if (!validCode_(code)) return { ok: false, error: "bad_card" };
-  return withLock_(function () {
+  var out = withLock_(function () {
     var sh = cardsSheet_(), id = fingerprint_(code);
     var found = findCard_(sh, id) || { row: 0, data: blankCard_(id) };
     var c = found.data, now = new Date(), today = todayStr_();
@@ -294,13 +309,15 @@ function staffStamp(code) {
     log_(now, c.member, "stamp", c.stamps, "", "");
     return { ok: true, newMember: isNew, card: view_(c) };
   });
+  forget_(code);
+  return out;
 }
 
 function staffFreeDrink(code, drink) {
   requireStaff_();
   if (!validCode_(code)) return { ok: false, error: "bad_card" };
   drink = DRINKS.indexOf(drink) >= 0 ? drink : "";
-  return withLock_(function () {
+  var out = withLock_(function () {
     var sh = cardsSheet_(), id = fingerprint_(code);
     var found = findCard_(sh, id);
     if (!found) return { ok: false, error: "not_full", card: view_(blankCard_("")) };
@@ -313,6 +330,8 @@ function staffFreeDrink(code, drink) {
     log_(now, c.member, "free_drink", "", drink, days);
     return { ok: true, card: view_(c) };
   });
+  forget_(code);
+  return out;
 }
 
 function staffSummary() {
@@ -388,9 +407,13 @@ function view_(c) {
 function nextMember_() {
   var props = PropertiesService.getScriptProperties();
   var n = Number(props.getProperty("lastMember") || 0);
-  if (!n) {   // first run, or the property was lost: carry on from the highest number in the sheet
-    var sh = cardsSheet_(), last = sh.getLastRow();
-    if (last > 1) sh.getRange(2, 2, last - 1, 1).getValues().forEach(function (r) { n = Math.max(n, Number(r[0]) || 0); });
+  if (!n) {   // first run, or the property was lost: carry on from the highest number in the Cards tab AND the Log tab
+    // (the Log too, because cards unused for 6 months are deleted, and their numbers must never be handed out again)
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    [[ss.getSheetByName("Cards"), 2], [ss.getSheetByName("Log"), 3]].forEach(function (t) {
+      var sh = t[0], last = sh ? sh.getLastRow() : 0;
+      if (last > 1) sh.getRange(2, t[1], last - 1, 1).getValues().forEach(function (r) { n = Math.max(n, Number(r[0]) || 0); });
+    });
   }
   n += 1;
   props.setProperty("lastMember", String(n));

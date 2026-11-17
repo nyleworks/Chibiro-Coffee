@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Content Security Policy: only this site's own scripts, styles, fonts and images run; the page may only talk to the stamp card (Google Apps Script).
+     If a new outside service is added (photos, maps, analytics), add its address here or the browser will block it. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Chibiro Coffee — Home-Brewed Specialty Coffee in Likas</title>
 <meta name="description" content="Chibiro Coffee: cozy, cat-approved specialty coffee in Taman Jaya, Likas, Kota Kinabalu. Open Tuesday to Sunday, 3:08 PM – 12:08 AM.">
 <link rel="icon" href="assets/chibiro-favicon.svg">
@@ -19,11 +23,9 @@
 <meta property="og:locale" content="en_MY">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#fdf6e3">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- fonts load without blocking the first paint (display=swap already shows the fallback until they arrive) -->
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@400;700&display=swap"></noscript>
+<!-- the two pixel fonts are hosted here (assets/fonts, OFL licence), so no visitor data goes to Google; font-display: swap in styles.css -->
+<link rel="preload" href="assets/fonts/press-start-2p-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/pixelify-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body class="cb">
