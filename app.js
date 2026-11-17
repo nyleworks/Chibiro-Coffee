@@ -5,67 +5,38 @@
   };
 
   /* ---------- Menu: Drinks / Snacks pages, 4×4 cards per page (2×4 on phones) ---------- */
-  // t: 'i' iced, 'h' hot. Merged from the café's menu screenshots with duplicates removed.
+  // The whole menu is written in index.html (#menu: one .menu-group per category, one .cb-item per item), so search engines
+  // read every item. This only builds the Drinks / Snacks switch, the category chips and the pager, and hides the cards
+  // that are not on the current page (they stay in the page, so nothing is lost for Google or screen-reader search).
   var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
-  // each shelf holds categories; item = [name, description, price (null = ask), 'i' iced / 'h' hot, badge]
-  var MENU = {
-    drinks: [
-      { cat: 'Signatures', items: [
-        ['Strawberry Matcha Latte', 'Matcha + strawberry puree + milk', 16, 'i', 'Best Seller'], ['Strawberry Cloud Matcha', 'Matcha + strawberry puree + milk + cold foam', 18, 'i'],
-        ['Tiramisu Latte', '', 20, 'i'], ['Mont Blanc', 'Orange cloud cream, orange americano', 16, 'i'], ['Sunset Americano', 'Orange juice and americano', 11, 'i'],
-        ['Strawberricano', 'Strawberry and espresso', 11, 'i'], ['Espresso Tonic', '', 16, 'i'], ['Dirty Latte', 'Espresso over chilled special milk', 16, 'i'],
-        ['Strawberry Spanish Latte', '', 16], ['Mango Cafe Latte', 'Mango milk and espresso', 14, 'i'], ['Chocolate Clouds', '3 types of chocolate with cloud on top', 16] ] },
-      { cat: 'Iced Coffee', items: [
-        ['Americano', '', 9, 'i'], ['Cafe Latte', 'White coffee', 11, 'i'], ['Spanish Latte', 'Cafe latte + condensed milk', 12, 'i'], ['Mocha', 'Choco + espresso + milk', 14, 'i'],
-        ['Caramel Latte', 'Cafe latte + caramel syrup', 14, 'i'], ['Hazelnut Latte', 'Cafe latte + syrup', 14, 'i'], ['French Vanilla Latte', 'Cafe latte + syrup', 14, 'i'],
-        ['Strawberry Cafe Latte', '', 14, 'i'], ['Blueberry Latte', '', 14, 'i'] ] },
-      { cat: 'Hot Coffee', items: [
-        ['Hot Americano', 'Black coffee', 8, 'h'], ['Hot Cafe Latte', 'White coffee', 10, 'h'], ['Hot Spanish Latte', '', 11, 'h'], ['Hot Mocha Latte', 'Choco + espresso + latte', 12, 'h'],
-        ['Espresso', 'Double shot', 6, 'h'], ['Extra Shot Espresso', 'Add to any drink', 3] ] },
-      { cat: 'Matcha & Taro', items: [
-        ['Matcha Latte', 'Matcha + milk', 14, 'i'], ['Hot Matcha Latte', 'Matcha + steamed milk', 12, 'h'], ['Blueberry Matcha', '', 16, 'i'], ['Mango Matcha', '', 16, 'i'],
-        ['Matcha Cream Taro', '', 16, 'i'], ['Taro Latte', '', 14, 'i'], ['Hot Taro Latte', '', 12, 'h'], ['Strawberry Cream Taro', '', 16, 'i'] ] },
-      { cat: 'Chocolate', items: [
-        ['Chocolate', 'Cocoa + sauce + milk', 12, 'i'], ['Hot Chocolate Latte', 'Cocoa powder + cocoa sauce + milk', 10, 'h'],
-        ['Triple Chocolate', '3 types of chocolate + milk', 13, 'i'], ['Strawberry Chocolate', 'Cocoa + milk + strawberry puree', 14, 'i'] ] },
-      { cat: 'Tea & Others', items: [
-        ['Peach Zest Tea', 'Peach tea with lemon slices', 12], ['Passion Zest Tea', 'Passion fruit tea with lemon slices', 12], ['Plain Water', '', 0.5] ] }
-    ],
-    snacks: [
-      { cat: 'Sweets', items: [
-        ['Seasalt Chocolate Cookies', '', 2], ['Black Cookies', '', 2], ['Soft Cookies', '', null], ['Brownies', '', 5.5], ['Fuggy Brownies', '', 8.5],
-        ['Banana Cake', '', 5], ['Lemon Pound Cake', '', 9] ] },
-      { cat: 'Savoury', items: [
-        ['Mee Siam', '', 3], ['Nasi Lemak Mini', '', 3], ['Laksa Peneng', '', 10], ['Meggie Cup', 'Cup noodles', 3.5], ['Meggie Bowl', '', null], ['Roasted Pumpkin Seeds', '', 4] ] },
-      { cat: 'For the Cats', items: [['Cat Treats', 'Treat the café cats', 1.5], ['Cat Figurine', 'A little Chibiro to take home', 5]] }
-    ]
-  };
+  var menuEl = $('menu'), SHELVES = [['drinks', 'Drinks'], ['snacks', 'Snacks']], MENU = {};
+  SHELVES.forEach(function (s) {
+    MENU[s[0]] = [].slice.call(menuEl.querySelectorAll('.menu-group[data-shelf="' + s[0] + '"]')).map(function (g) {
+      return { el: g, cat: g.querySelector('.menu-group__title').textContent, items: [].slice.call(g.querySelectorAll('.cb-item')) };
+    });
+  });
+  var pagerEl = document.createElement('div');
+  menuEl.appendChild(pagerEl);
+  menuEl.classList.add('is-paged');                        // CSS hides the category headings (the chips show them instead)
   var shelf = 'drinks', cat = { drinks: 0, snacks: 0 }, page = 0, small = window.matchMedia('(max-width: 767px)');
   function perPage() { return small.matches ? 8 : 16; }
-  function rm(v) { return v == null ? 'Ask us' : 'RM ' + v.toFixed(2); }
   function renderMenu() {
     var group = MENU[shelf][cat[shelf]], list = group.items, n = perPage(), pages = Math.max(1, Math.ceil(list.length / n));
     page = Math.max(0, Math.min(pages - 1, page));
-    $('tabs').innerHTML = '<div class="menu-shelves" role="group" aria-label="Menu">' + [['drinks', 'Drinks'], ['snacks', 'Snacks']].map(function (t) {
+    $('tabs').innerHTML = '<div class="menu-shelves" role="group" aria-label="Menu">' + SHELVES.map(function (t) {
       return '<button class="cb-tab" type="button" aria-pressed="' + (t[0] === shelf) + '" aria-controls="menu" data-shelf="' + t[0] + '">' + t[1] + '</button>';
     }).join('') + '</div><div class="menu-cats" role="group" aria-label="' + (shelf === 'drinks' ? 'Drink' : 'Snack') + ' categories">' + MENU[shelf].map(function (g, i) {
       return '<button class="menu-cat" type="button" aria-pressed="' + (i === cat[shelf]) + '" data-cat="' + i + '">' + esc(g.cat) + ' <span class="menu-cat__n">' + g.items.length + '</span></button>';
     }).join('') + '</div>';
-    var cards = list.slice(page * n, page * n + n).map(function (it) {
-      var temp = it[3] === 'i' ? '<span class="cb-tag cb-tag--ice">Iced</span>' : it[3] === 'h' ? '<span class="cb-tag cb-tag--hot">Hot</span>' : '';
-      return '<article class="cb-item' + (it[4] ? ' cb-item--featured' : '') + '"><div class="cb-item__head"><h3 class="cb-item__name">' + esc(it[0]) + '</h3>' +
-        (it[4] ? '<span class="cb-tag cb-tag--berry">' + esc(it[4]) + '</span>' : '') + '</div>' +
-        '<p class="cb-item__meta">' + esc(it[1] || group.cat) + '</p>' +
-        '<div class="cb-item__foot"><span class="cb-item__price' + (it[2] == null ? ' is-ask' : '') + '">' + rm(it[2]) + '</span><span class="cb-item__opts">' + temp + '</span></div></article>';
-    });
-    var pager = pages > 1 ? '<nav class="menu-pager" aria-label="Menu pages"><button class="cb-btn cb-btn--plain menu-pager__btn" data-page="-1"' + (page ? '' : ' disabled') + ' aria-label="Previous page">&lt;</button>' +
+    SHELVES.forEach(function (s) { MENU[s[0]].forEach(function (g) { g.el.hidden = g !== group; }); });
+    list.forEach(function (it, i) { it.hidden = i < page * n || i >= page * n + n; });
+    pagerEl.innerHTML = pages > 1 ? '<nav class="menu-pager" aria-label="Menu pages"><button class="cb-btn cb-btn--plain menu-pager__btn" data-page="-1"' + (page ? '' : ' disabled') + ' aria-label="Previous page">&lt;</button>' +
       '<span class="menu-pager__dots">' + Array.apply(null, Array(pages)).map(function (_, i) {
         return '<button class="menu-pager__dot" data-goto="' + i + '" aria-label="Page ' + (i + 1) + '"' + (i === page ? ' aria-current="page"' : '') + '></button>';
       }).join('') + '</span><span class="menu-pager__count">' + (page + 1) + ' / ' + pages + '</span>' +
       '<button class="cb-btn cb-btn--plain menu-pager__btn" data-page="1"' + (page < pages - 1 ? '' : ' disabled') + ' aria-label="Next page">&gt;</button></nav>' : '';
-    $('menu').innerHTML = '<div class="menu-grid">' + cards.join('') + '</div>' + pager;
   }
-  // renderMenu rebuilds the buttons, so hand focus back to the same button (or its neighbour) when it had focus
+  // renderMenu rebuilds the buttons and the pager, so hand focus back to the same button (or its neighbour) when it had focus
   function refocus(had, sel, alt) {
     if (!had) return;
     var el = document.querySelector(sel);
