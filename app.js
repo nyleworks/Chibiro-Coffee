@@ -173,6 +173,18 @@
     } else if (e.target.closest('[data-todo]')) { e.preventDefault(); }
   });
 
+  /* ---------- Phone menu: the menu button opens the links and toggles below the bar ---------- */
+  (function () {
+    var nav = document.querySelector('.cb-nav'), btn = document.getElementById('navMenu'), panel = document.getElementById('navPanel');
+    if (!nav || !btn || !panel) return;
+    function set(open) { if (open) nav.setAttribute('data-open', ''); else nav.removeAttribute('data-open'); btn.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+    btn.addEventListener('click', function () { set(!nav.hasAttribute('data-open')); });
+    panel.addEventListener('click', function (e) { if (e.target.closest('a')) set(false); });   // a link closes it; the toggles keep it open
+    document.addEventListener('click', function (e) { if (nav.hasAttribute('data-open') && !nav.contains(e.target)) set(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && nav.hasAttribute('data-open')) { set(false); btn.focus(); } });
+    window.addEventListener('resize', function () { if (window.innerWidth >= 768) set(false); });
+  })();
+
   /* ---------- Hero = one full screen: tell CSS how tall the sticky nav is ---------- */
   var navEl = document.querySelector('.cb-nav');
   function setNavH() { document.documentElement.style.setProperty('--nav-h', navEl.offsetHeight + 'px'); }
@@ -301,6 +313,8 @@
     var bx = walk ? 14 : 13, by = (walk ? 21 : 22) + bob, hx = walk ? 22 : 20.5, hy = (walk ? 12.5 : 12) + bob;
     var col = function (part, ox, oy, dark, k) { return function (x, y) { var c = B.col(part, x + 0.5 - ox, y + 0.5 - oy, k ? k(x, y) : 0); if (part === 'body' && y + 0.5 - oy > 2.6) c = shade(c, -0.14); if (part === 'head' && y + 0.5 - oy > 4.4) c = shade(c, -0.1); return dark ? shade(c, -0.25) : c; }; };
 
+    if (st.pose === 'curl') return drawCurl(B, st, col);
+
     // soft ground shadow
     var sh = ell(15.5, 29.7, 10.5, 1.6);
     for (var i = 0; i < 1024; i++) if (sh(i % 32, i >> 5)) g[i] = 'rgba(44,26,18,0.25)';
@@ -372,6 +386,50 @@
     for (i = 0; i < 1024; i++) if (g[i]) { cx.fillStyle = g[i]; cx.fillRect(i % 32, i >> 5, 1, 1); }
     return c;
   }
+
+  // curled up asleep: a round loaf with the head resting on the front paws and the tail wrapped round the front.
+  // st.step 0/1 = breathing out/in (the back rises a little)
+  function drawCurl(B, st, col0) {
+    var g = new Array(1024), br = st.step ? 0.6 : 0, i;
+    var col = function (part, ox, oy, k) { return function (x, y) { var c = B.col(part, x + 0.5 - ox, y + 0.5 - oy, k ? k(x, y) : 0); if (part === 'body' && y + 0.5 - oy > 2.4) c = shade(c, -0.14); return c; }; };
+    var sh = ell(15.5, 29.8, 12, 1.5);
+    for (i = 0; i < 1024; i++) if (sh(i % 32, i >> 5)) g[i] = 'rgba(44,26,18,0.25)';
+    var body = any(ell(14, 24.6 - br / 2, 9.4, 4.6 + br / 2), ell(8.6, 24.4 - br / 2, 5, 4.6 + br / 2));
+    paint(g, body, col('body', 13.5, 24));
+    var tp = [[5.2, 25.5], [5.4, 27.4], [7.4, 28.6], [11, 28.9], [15, 28.8], [18.6, 28.3]];
+    paint(g, line(tp, 1.2), col('tail', 0, 0, function (x, y) { return near(tp, x, y)[1]; }));
+    paint(g, any(ell(21.4, 28, 2.4, 1.2), ell(25.2, 28, 2.3, 1.2)), col('leg', 0, 0, function () { return 1; }));
+    var hx = 23, hy = 22.6;
+    if (B.ears === 'fold') {
+      paint(g, ell(hx - 3.8, hy - 4.8, 2.5, 1.6), col('ear', hx, hy)); paint(g, ell(hx + 3.8, hy - 4.8, 2.5, 1.6), col('ear', hx, hy));
+    } else {
+      [[hx - 6.4, hy - 1.6, hx - 1.4, hy - 4.6, hx - 5.2, hy - 9.4], [hx + 1.4, hy - 4.6, hx + 6.4, hy - 1.6, hx + 5.2, hy - 9.4]].forEach(function (e) {
+        var cxm = (e[0] + e[2] + e[4]) / 3, cym = (e[1] + e[3] + e[5]) / 3, s = 0.5;
+        var inner = tri(cxm + (e[0] - cxm) * s, cym + (e[1] - cym) * s + 0.6, cxm + (e[2] - cxm) * s, cym + (e[3] - cym) * s + 0.6, cxm + (e[4] - cxm) * s, cym + (e[5] - cym) * s + 0.6), base = col('ear', hx, hy);
+        paint(g, tri(e[0], e[1], e[2], e[3], e[4], e[5]), function (x, y) { return inner(x, y) ? PINK : base(x, y); });
+      });
+    }
+    paint(g, any(ell(hx, hy, 6.6, 5.4), ell(hx - 5, hy + 2.2, 2.1, 2), ell(hx + 5, hy + 2.2, 2.1, 2)), col('head', hx, hy));
+    function px(x, y, c) { if (x >= 0 && x < 32 && y >= 0 && y < 32) g[y * 32 + x] = c; }
+    var ey = Math.round(hy) + 1, e1 = Math.round(hx - 4), e2 = Math.round(hx + 2), nx = Math.round(hx - 1);
+    [e1, e2].forEach(function (ex) { px(ex, ey, OUT); px(ex + 1, ey, OUT); });   // eyes shut
+    px(nx, ey + 1, NOSE); px(nx + 1, ey + 1, NOSE);
+    px(e1 - 1, ey + 1, BLUSH); px(e2 + 2, ey + 1, BLUSH);
+    var c = document.createElement('canvas'); c.width = c.height = 32;
+    var cx = c.getContext('2d');
+    for (i = 0; i < 1024; i++) if (g[i]) { cx.fillStyle = g[i]; cx.fillRect(i % 32, i >> 5, 1, 1); }
+    return c;
+  }
+  // the little dark grey cat asleep on the porch sofa (only in the hero, not on the stamp card)
+  var SOFA_BREED = { name: 'Charcoal', eye: '#e0c030', ears: 'up', col: function (p, x, y, k) {
+    var D = '#55555e', D2 = '#6a6a74', L = '#7c7c86', S = '#3e3e46';
+    if (p === 'head') { if (y > 1.6 && Math.abs(x) < 3) return L; return y < -3.6 ? D2 : D; }
+    if (p === 'ear') return S;
+    if (p === 'body') return y < -2.6 ? D2 : D;
+    if (p === 'tail') return k > 0.8 ? S : D;
+    if (p === 'leg') return L;
+    return D;
+  } };
 
   /* ---------- Cat Stamp Card ----------
      The card lives on the customer's phone as a random code (no sign-up, no personal details) and shows as a
@@ -802,7 +860,7 @@
       c.el.style.zIndex = Math.round(c.y);
       c.el.classList.toggle('is-flip', c.face < 0);
     }
-    layout(); dc.forEach(function (c) { place(c); }); wPlace(); den._walker = walker;
+    layout(); dc.forEach(function (c) { place(c); }); wPlace();
     var rt; window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(layout, 150); });
     // the loop only runs while the footer yard is on screen; off screen it stops completely
     var seen = true, prevT = 0, lastPaint = 0, running = false;
@@ -856,6 +914,26 @@
     c.key = key;
     var spr = c.cache[key] || (c.cache[key] = drawCat(c.breed, st));
     c.cx.clearRect(0, 0, 32, 32); c.cx.drawImage(spr, 0, 0);
+  }
+  // the two sleeping cats in the scene (on the CHIBIRO letters and on the porch sofa) use the same sprites as the yard cats
+  var sleepers = [['nap', BREEDS[1]], ['sofa', SOFA_BREED]].map(function (d) {
+    var el = document.createElement('div'), cv = document.createElement('canvas');
+    el.className = 'cb-sleeper'; el.setAttribute('aria-hidden', 'true'); cv.width = cv.height = 32; el.appendChild(cv); hero.appendChild(el);
+    return { key: d[0], B: d[1], el: el, cv: cv, cx: cv.getContext('2d'), cache: {}, cur: '', size: 0 };
+  });
+  function placeSleepers(t, hx, hy) {
+    var SC = window.ChibiroScene, info = SC && SC.info ? SC.info() : null;
+    sleepers.forEach(function (z) {
+      var at = SC && SC.sleepers && SC.sleepers[z.key];
+      if (!info || !info.W || !at) { z.el.style.display = 'none'; return; }
+      var Pp = info.P, Rc = info.rect, mobile = window.innerWidth < 768;
+      var size = z.key === 'nap' ? Math.round(at.w * Pp * 32 / 27) : Math.round((mobile ? 32 : 48) * (info.scale ? info.scale(info.yardTop) : 1));
+      if (size !== z.size) { z.size = size; z.el.style.width = z.el.style.height = size + 'px'; }
+      var step = !still() && Math.sin(t * 0.0018 + (z.key === 'nap' ? 0 : 2)) > 0.2 ? 1 : 0, key = 'c' + step;
+      if (key !== z.cur) { z.cur = key; var spr = z.cache[key] || (z.cache[key] = drawCat(z.B, { pose: 'curl', step: step, tail: 0, ear: 0, eyes: 'sleep' })); z.cx.clearRect(0, 0, 32, 32); z.cx.drawImage(spr, 0, 0); }
+      z.el.style.display = 'block';
+      z.el.style.transform = 'translate3d(' + Math.round(Rc.left - hx + at.x * Pp - size / 2) + 'px,' + Math.round(Rc.top - hy + at.y * Pp - size * 30 / 32) + 'px,0)';
+    });
   }
   var lastNight = -1;
   var yarn = { x: 300, ax: 0, ay: 0, path: [], ready: false, id: 0, v: 0, kickCool: 0 };
@@ -947,6 +1025,54 @@
     m.ax = nx; m.ay = ny; if (d <= st) m.path.shift();
     return Math.min(d, st);
   }
+  /* ---------- extra moves: hops, naps up on the furniture, chases and playing in the flowers ---------- */
+  var taken = {};                                           // perch id -> the cat resting there
+  function jumpTo(c, t, x1, y1, g1, h, then) {
+    c.path = []; c.act = { kind: 'jump', t0: t, dur: 380 + Math.min(260, Math.abs(x1 - c.ax) * 6 + Math.abs(y1 - c.ay) * 6), x0: c.ax, y0: c.ay, g0: c.gy == null ? c.ay : c.gy, x1: x1, y1: y1, g1: g1, h: h, then: then };
+  }
+  function hopAway(c, t, others) {                          // stuck (between cats, people or furniture): hop clear to a free spot nearby
+    if (t < (c.hopCool || 0)) return false;                 // a last resort, at most once every 12 s per cat
+    var ci = cellAt(c.ax, c.ay), i0 = ci % G.cols, j0 = Math.floor(ci / G.cols), best = null;
+    for (var tries = 0; tries < 60 && !best; tries++) {
+      var r = 3 + Math.floor(Math.random() * (tries < 30 ? 6 : 12)), a = Math.random() * Math.PI * 2, i = Math.round(i0 + Math.cos(a) * r), j = Math.round(j0 + Math.sin(a) * r * 0.7);
+      if (i < 0 || j < 0 || i >= G.cols || j >= G.rows || !G.free[j * G.cols + i]) continue;
+      var cc = centre(j * G.cols + i), b = catBox(cc[0], cc[1]);
+      if (others.some(function (o) { return hit([b[0] - 2, b[1], b[2] + 2, b[3] + 2], o); })) continue;
+      best = cc;
+    }
+    if (!best) return false;
+    jumpTo(c, t, best[0], best[1], best[1], 7, null); c.goal = null; c.next = t + 900; c.hopCool = t + 12000; return true;
+  }
+  function goPerch(c, info) {                               // walk to the front of a table set, to hop up onto the table or an empty chair
+    var list = (info.perches || []).filter(function (p) { return !taken[p.id]; });
+    for (var tries = 0; tries < 6 && list.length; tries++) {
+      var p = list[Math.floor(Math.random() * list.length)], to = nearestFree(cellAt(p.x, p.gy + 4));
+      if (to < 0) continue;
+      var cc = centre(to); if (Math.abs(cc[0] - p.x) > 14 || Math.abs(cc[1] - p.gy) > 14) continue;
+      var path = route(cellAt(c.ax, c.ay), to); if (!path) continue;
+      c.path = path; c.dest = cc; c.goal = { kind: 'perch', p: p }; return true;
+    }
+    return false;
+  }
+  function goFlowers(c, info) {                             // trot over to the flower border and play with the flowers
+    var fl = (info.flowers || []).filter(function (f) { return f[0] > 10 && f[0] < info.W - 10 && f[1] < info.H - 3; });
+    for (var tries = 0; tries < 6 && fl.length; tries++) {
+      var f = fl[Math.floor(Math.random() * fl.length)], to = nearestFree(cellAt(f[0], f[1] + 3));
+      if (to < 0) continue;
+      var cc = centre(to); if (Math.abs(cc[0] - f[0]) > 12 || Math.abs(cc[1] - f[1]) > 10) continue;
+      var path = route(cellAt(c.ax, c.ay), to); if (!path) continue;
+      c.path = path; c.dest = cc; c.goal = { kind: 'flower', f: f }; return true;
+    }
+    return false;
+  }
+  function startChase(c, t) {                               // dash after another cat, which runs off
+    var pool = cats.filter(function (o) { return o !== c && o.ready && !o.act && !o.chase && !o.flee && !o.goal; });
+    if (!pool.length) return false;
+    var o = pool[Math.floor(Math.random() * pool.length)];
+    if (!wanderTo(o, cats)) return false;
+    o.flee = { by: c, until: t + 5000 }; c.chase = { tgt: o, until: t + 5000, re: 0 }; o.goal = null; c.goal = null;
+    return true;
+  }
   var prev = 0;
 
   function frame(t) {
@@ -969,7 +1095,7 @@
         var cs0 = c.size || s, id = c.y < 0 ? -1 : nearestFree(cellAt((c.x + cs0 / 2 - Rc.left) / Pp, (c.y + cs0 * 29.5 / 32 - Rc.top) / Pp));
         if (c.y < 0 || id < 0) { var fr = []; for (var k = 0; k < G.free.length; k++) if (G.free[k]) { var cp = centre(k); if (!info.walkers.some(function (w) { return hit(catBox(cp[0], cp[1]), [w[0] - 20, w[1], w[2] + 20, w[3] + 4]); }) && !cats.some(function (o) { return o !== c && o.ready && hit(catBox(cp[0], cp[1]), catBox(o.ax, o.ay)); })) fr.push(k); } id = fr.length ? fr[Math.floor(Math.random() * fr.length)] : 0; var cc = centre(id); c.ax = cc[0]; c.ay = cc[1]; c.path = []; }
         else { var here = centre(id); c.ax = here[0]; c.ay = here[1]; c.path = []; }
-        c.dest = null; c.next = 0; c.ready = true; c.blocked = 0;
+        c.dest = null; c.next = 0; c.ready = true; c.blocked = 0; c.act = null; c.goal = null; c.chase = null; c.flee = null; c.lift = 0; c.gy = null; taken = {};
       });
       if (!yarn.ready) {                                    // the yarn ball rests on a free spot, away from the cats
         var spots = []; for (var k2 = 0; k2 < G.free.length; k2++) if (G.free[k2]) { var sp = centre(k2); if (!cats.some(function (o) { return o.ready && Math.abs(o.ax - sp[0]) + Math.abs(o.ay - sp[1]) < 24; })) spots.push(sp); }
@@ -987,19 +1113,62 @@
 
     cats.forEach(function (c) {
       var tx, ox = c.x, moving = false, cs = s;
-      if (info && info.W && c.ready) {                    // IDLE_PLAY in the yard: wander in 2D, around furniture and people
-        if (!c.path.length && t > c.next) {                 // time to move: any cat may go and play with the yarn ball, or just wander
-          var keen = c.role === 'leader' ? 0.6 : c.role === 'sit' ? 0.15 : 0.3;
-          if (!(Math.random() < keen && goToYarn(c))) wanderTo(c, cats);
+      var special = false;
+      if (info && info.W && c.ready && c.act) {           // a special move: mid-hop, napping up on the furniture, or playing in the flowers
+        special = true; var A = c.act;
+        if (A.kind === 'jump') {
+          var u = Math.min(1, (t - A.t0) / A.dur);
+          c.ax = A.x0 + (A.x1 - A.x0) * u; c.ay = A.y0 + (A.y1 - A.y0) * u; c.gy = A.g0 + (A.g1 - A.g0) * u; c.lift = A.h * 4 * u * (1 - u);
+          if (Math.abs(A.x1 - A.x0) > 0.5) c.face = A.x1 > A.x0 ? 1 : -1;
+          c.pose = 'leap';
+          if (u >= 1) { c.lift = 0; c.act = null; if (c.gy === c.ay) c.gy = null; if (A.then) A.then(); }
+        } else if (A.kind === 'rest') {
+          c.pose = A.curl ? 'curl' : 'sit';
+          if (t > A.until || (SC.holding && SC.holding[c.i] > t)) { var dn = A.down; delete taken[A.id]; jumpTo(c, t, dn[0], dn[1], dn[1], 6, null); c.next = t + 1500; }
+        } else if (A.kind === 'play') {                   // batting at the flowers: little pounces on the spot, turning this way and that
+          var ph2 = (t - A.t0) % 2200; c.lift = ph2 < 260 ? 2.5 * Math.sin(ph2 / 260 * Math.PI) : 0;
+          if (ph2 < 30 && Math.random() < 0.35) c.face = -c.face;
+          c.pose = ph2 < 260 ? 'leap' : 'sit'; c.earUntil = t + 100;
+          if (t > A.until) { c.lift = 0; c.act = null; c.next = t + 2000; }
+        }
+        cs = Math.round(s * SCL(c.gy != null ? c.gy : c.ay));
+        c.x = Rc.left + c.ax * Pp - cs / 2; c.y = Rc.top + c.ay * Pp - cs * 29.5 / 32 - (c.lift || 0) * Pp;
+        catBoxes[c.i] = c.act && c.act.kind === 'play' ? catBox(c.ax, c.ay) : null;
+        c.el.classList.toggle('cb-cat--flip', c.face < 0);
+      }
+      if (!special && info && info.W && c.ready) {        // IDLE_PLAY in the yard: wander in 2D, around furniture and people
+        c.pose = null; c.gy = null; c.lift = 0;
+        if (c.goal && !c.path.length) {                     // arrived: hop up onto the furniture, or start playing with the flowers
+          var gl = c.goal; c.goal = null;
+          if (gl.kind === 'perch' && !taken[gl.p.id] && Math.abs(c.ax - gl.p.x) < 16) {
+            var P0 = gl.p, down = [c.ax, c.ay]; taken[P0.id] = c;
+            jumpTo(c, t, P0.x, P0.y, P0.gy, 9, function () { c.act = { kind: 'rest', id: P0.id, until: t + 12000 + Math.random() * 12000, curl: Math.random() < 0.6, down: down }; });
+          } else if (gl.kind === 'flower') { c.face = gl.f[0] > c.ax ? 1 : -1; c.act = { kind: 'play', t0: t, until: t + 3500 + Math.random() * 3000 }; }
+          c.next = t + 1000;
+        }
+        if (c.chase) {                                      // chasing: keep heading for the other cat, faster than a walk
+          var tg = c.chase.tgt;
+          if (t > c.chase.until || !tg.ready || tg.act || Math.abs(tg.ax - c.ax) + Math.abs(tg.ay - c.ay) < 12) { tg.flee = null; c.chase = null; c.path = []; c.next = t + 1500; }
+          else if (t > c.chase.re) { c.chase.re = t + 450; var pth = route(cellAt(c.ax, c.ay), cellAt(tg.ax, tg.ay)); if (pth) c.path = pth; }
+        }
+        if (c.flee && (t > c.flee.until || !c.flee.by.chase)) c.flee = null;
+        else if (c.flee && !c.path.length) wanderTo(c, cats);
+        if (!c.act && !c.chase && !c.flee && !c.goal && !c.path.length && t > c.next) {   // time to move: a nap up on the furniture, the flowers, a chase, the yarn ball, or just a wander
+          var keen = c.role === 'leader' ? 0.6 : c.role === 'sit' ? 0.15 : 0.3, r0 = Math.random();
+          var perch = c.role === 'sit' ? 0.3 : 0.1, flw = 0.12, chs = c.role === 'leader' ? 0.12 : 0.06;
+          if (r0 < perch) { if (!goPerch(c, info)) wanderTo(c, cats); }
+          else if (r0 < perch + flw) { if (!goFlowers(c, info)) wanderTo(c, cats); }
+          else if (r0 < perch + flw + chs) { if (!startChase(c, t)) wanderTo(c, cats); }
+          else if (!(Math.random() < keen && goToYarn(c))) wanderTo(c, cats);
           c.next = t + (c.role === 'sit' ? 10000 + Math.random() * 10000 : 2500 + Math.random() * 4000 * (1 + c.i * 0.3));   // the Tuxedo sits proudly for longer
         }
         var held = SC.holding && SC.holding[c.i] > t;                     // a customer is petting this cat: stay put and enjoy it
         if (held) { c.petUntil = Math.max(c.petUntil, t + 300); c.blocked = 0; if (c.role === 'wander') c.next = Math.max(c.next, t + 1500); }
-        var others = cats.filter(function (o) { return o !== c && o.ready; }).map(function (o) { return catBox(o.ax, o.ay); });   // keep a cat's width apart
+        var others = cats.filter(function (o) { return o !== c && o.ready && !(o.act && o.act.kind !== 'play') && !(c.chase && c.chase.tgt === o) && !(c.flee && c.flee.by === o); }).map(function (o) { return catBox(o.ax, o.ay); });   // keep a cat's width apart
         if (!held && !c.path.length && info.walkers.concat(others).some(function (w) { return hit(catBox(c.ax, c.ay), w); })) wanderTo(c, cats);   // standing in someone's way: move along
-        var was = c.path.length, mv = held ? 0 : stepAlong(c, c.v, dts, info.walkers.concat(others));
+        var was = c.path.length, mv = held ? 0 : stepAlong(c, c.v * (c.chase ? 2.2 : c.flee ? 2 : 1), dts, info.walkers.concat(others));
         if (!held) cats.forEach(function (o) {                  // two cats ended up on top of each other: ease apart
-          if (o === c || !o.ready || !hit(catBox(c.ax, c.ay), catBox(o.ax, o.ay))) return;
+          if (o === c || !o.ready || (o.act && o.act.kind !== 'play') || !hit(catBox(c.ax, c.ay), catBox(o.ax, o.ay))) return;
           var dx = c.ax - o.ax, dy = c.ay - o.ay, d = Math.sqrt(dx * dx + dy * dy) || 1; if (d < 0.5) { dx = c.i - o.i; dy = 0; d = Math.abs(dx); }
           var nx = c.ax + dx / d * 6 * dts, ny = c.ay + dy / d * 6 * dts;
           if (G.free[cellAt(nx, ny)] && !info.walkers.some(function (w) { return hit(catBox(nx, ny), w); })) { c.ax = nx; c.ay = ny; mv = Math.max(mv, 0.01); if (dx) c.face = dx > 0 ? 1 : -1; }
@@ -1010,20 +1179,28 @@
           var nx = c.ax + dx / d * 6 * dts, ny = c.ay + dy / d * 6 * dts;
           if (G.free[cellAt(nx, ny)]) { c.ax = nx; c.ay = ny; mv = Math.max(mv, 0.01); if (Math.abs(dx) > 0.3) c.face = dx > 0 ? 1 : -1; }
         });
-        if (mv < 0) { c.blocked += dt * 16.7; if (c.blocked > 1500) { c.path = []; c.blocked = 0; wanderTo(c, cats); } }   // give up and go somewhere else
-        else c.blocked = 0;
+        if (mv < 0) {                                       // blocked: first find another way round; hop clear only if that keeps failing
+          c.blocked += dt * 16.7;
+          if (c.blocked > 1500) { c.stuckN = (c.stuckN || 0) + 1; c.blocked = 0; if (!(c.stuckN >= 3 && hopAway(c, t, info.walkers.concat(others)))) { c.path = []; c.goal = null; wanderTo(c, cats); } else c.stuckN = 0; }
+        }
+        else { c.blocked = 0; if (mv > 0.2) c.stuckN = 0; }
+        var squeezed = info.walkers.concat(others).some(function (w) { return hit(catBox(c.ax, c.ay), w); });   // still pressed against a cat or a person after a while: hop out of it
+        c.squeeze = squeezed && !held ? (c.squeeze || 0) + dt * 16.7 : 0;
+        if (c.squeeze > 4000 && !c.act) { c.squeeze = 0; hopAway(c, t, info.walkers.concat(others)); }
         if (was && !c.path.length && c.role === 'wander') c.next = t + 2500 + Math.random() * 4000 * (1 + c.i * 0.3);
         moving = mv > 0;
         var cur = cellAt(c.ax, c.ay);
-        if (!G.free[cur]) { var nf = nearestFree(cur); if (nf >= 0) { var cc2 = centre(nf); c.ax = cc2[0]; c.ay = cc2[1]; c.path = []; } }   // never rest on top of anything
-        cs = Math.round(s * SCL(c.ay));                                     // nearer the house, smaller
+        if (!c.act && !G.free[cur]) { var nf = nearestFree(cur); if (nf >= 0) { var cc2 = centre(nf); c.ax = cc2[0]; c.ay = cc2[1]; c.path = []; } }   // never rest on top of anything
+        cs = Math.round(s * SCL(c.gy != null ? c.gy : c.ay));               // nearer the house, smaller
         c.x = Rc.left + c.ax * Pp - cs / 2; c.y = Rc.top + c.ay * Pp - cs * 29.5 / 32;
-        catBoxes[c.i] = catBox(c.ax, c.ay);
+        catBoxes[c.i] = c.act ? null : catBox(c.ax, c.ay);
+        if (c.act) c.y -= (c.lift || 0) * Pp;
         if (moving) {
           c.el.classList.toggle('cb-cat--flip', c.face < 0);
           c.lastMove = t; c.walk = (c.walk + mv * Pp * 32 / cs * 0.9 + 0.04 * dt) % 8;
         }
-      } else {
+      } else if (!special) {
+      if (c.act || c.goal) { if (c.act && c.act.id) delete taken[c.act.id]; c.act = null; c.goal = null; c.chase = null; c.flee = null; c.lift = 0; c.gy = null; c.pose = null; }
       if (!playful) {                                   // Sleepy: docked bottom-right
         tx = W - ledge - packW + c.i * (s + gap);
       } else {                                          // IDLE_PLAY
@@ -1054,11 +1231,14 @@
       var pet = t < c.petUntil, step = Math.floor(c.walk);
       var pose = moving || t - c.lastMove < 350 ? 'walk' : 'sit';
       if (pose === 'walk' && !moving) step = 0;
+      if (c.pose === 'leap') { pose = 'walk'; step = 2; }
+      else if (c.pose === 'curl') { pose = 'curl'; step = !still() && Math.sin(t * 0.0018 + c.i) > 0.2 ? 1 : 0; }
+      else if (c.pose === 'sit') pose = 'sit';
       renderCat(c, {
         pose: pose, step: step, pet: pet,
         tail: pet ? 0 : Math.round(Math.sin(c.tailT) * 2),
         ear: !still() && t < c.earUntil ? c.earSide : 0,
-        eyes: pet ? 'happy' : !playful ? 'sleep' : t < c.blinkUntil ? 'blink' : 'open'
+        eyes: pose === 'curl' ? 'sleep' : pet ? 'happy' : !playful ? 'sleep' : t < c.blinkUntil ? 'blink' : 'open'
       });
 
       var bob = moving && c.bounce ? (step % 4 < 2 ? -c.bounce : 0) : 0;
@@ -1066,7 +1246,7 @@
       c.el.style.transform = 'translate3d(' + Math.round(c.x - hx) + 'px,' + Math.round(y - hy) + 'px,0)';
     });
     if (info && info.W && yarn.ready && !yarn.path.length && t > yarn.kickCool) cats.some(function (c) {   // a cat touching the ball bats it away
-      if (!c.ready || !hit(catBox(c.ax, c.ay), [yarn.ax - 3, yarn.ay - 5, yarn.ax + 3, yarn.ay + 1])) return false;
+      if (!c.ready || c.act || !hit(catBox(c.ax, c.ay), [yarn.ax - 3, yarn.ay - 5, yarn.ax + 3, yarn.ay + 1])) return false;
       var dx = yarn.ax - c.ax, dy = yarn.ay - (c.ay - 4), d = Math.sqrt(dx * dx + dy * dy);
       if (d < 1) { dx = c.face; dy = 0; d = 1; }
       var reach = 18 + Math.random() * 18, from = cellAt(yarn.ax, yarn.ay), path = null;
@@ -1086,9 +1266,11 @@
     var nt = info && info.W && SC.night ? Math.round(SC.night * 50) / 50 : 0;
     if (nt !== lastNight) {
       lastNight = nt;
-      var f = nt ? 'brightness(' + (1 - 0.48 * nt).toFixed(2) + ') saturate(' + (1 - 0.4 * nt).toFixed(2) + ') hue-rotate(' + Math.round(-10 * nt) + 'deg)' : '';
+      var f = nt ? 'brightness(' + (1 - 0.3 * nt).toFixed(2) + ') saturate(' + (1 - 0.25 * nt).toFixed(2) + ') hue-rotate(' + Math.round(-10 * nt) + 'deg)' : '';
       cats.forEach(function (c) { c.cv.style.filter = f; }); yarnEl.style.filter = f;
+      sleepers.forEach(function (z) { z.cv.style.filter = f; });
     }
+    placeSleepers(t, hx, hy);
     if (heroOn) requestAnimationFrame(frame); else running = false;
   }
   // the hero cats only animate while the hero is on screen; the last frame above hides them, then the loop stops
