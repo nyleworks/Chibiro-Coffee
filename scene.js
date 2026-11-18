@@ -11,7 +11,10 @@
   var hero = document.getElementById('top'), cvs = document.getElementById('scene'),
       copy = hero && hero.querySelector('.hero__copy');
   if (!hero || !cvs || !cvs.getContext) return;
-  var ctx = cvs.getContext('2d');
+  // Each frame is painted on a hidden canvas kept in normal memory (willReadFrequently), then copied to the screen in one go.
+  // Drawing thousands of tiny squares straight onto the on-screen canvas made some Android phones' graphics chips drop
+  // whole blocks of the picture (Chrome on Android, 2026-11-18).
+  var screen = cvs.getContext('2d'), buf = document.createElement('canvas'), ctx = buf.getContext('2d', { willReadFrequently: true }) || buf.getContext('2d');
   // reduce = hold the scene still: the visitor's reduce-motion setting, or Cat Mode "Sleepy" (app.js calls ChibiroScene.setPaused)
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches, osReduce = reduce;
 
@@ -305,7 +308,7 @@
     if (!cw || !ch) return;
     P = cw < 768 ? 2 : 3;   // same pixel size as the cat sprites (64px / 96px cats = 2× / 3×)
     W = Math.ceil(cw / P); H = Math.ceil(ch / P);
-    cvs.width = W; cvs.height = H;
+    cvs.width = W; cvs.height = H; buf.width = W; buf.height = H;
     cvs.style.width = W * P + 'px'; cvs.style.height = H * P + 'px';
     var top = hero.getBoundingClientRect().top;
     panelB = copy ? clamp(Math.round((copy.getBoundingClientRect().bottom - top) / P) + 3, 0, Math.round(H * 0.7)) : 0;
@@ -875,6 +878,10 @@
   var lastT = 0;
   function draw(t) {
     if (!W) return;
+    paint(t);
+    screen.clearRect(0, 0, W, H); screen.drawImage(buf, 0, 0);   // one copy to the screen per frame
+  }
+  function paint(t) {
     var f = phase(), p = mix(f), dt = Math.min(200, t - lastT || 16); lastT = t;
     P_ = p; tintCache = {};
     var horizon = yardTop - 2, span = Math.max(10, house.top - skyTop);
