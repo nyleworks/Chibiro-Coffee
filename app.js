@@ -20,6 +20,16 @@
   menuEl.classList.add('is-paged');                        // CSS hides the category headings (the chips show them instead)
   var shelf = 'drinks', cat = { drinks: 0, snacks: 0 }, page = 0, small = window.matchMedia('(max-width: 767px)');
   function perPage() { return small.matches ? 8 : 16; }
+  var menuSmooth = false, swipeT = 0;
+  // swiping the cards on a phone moves the pager along with them
+  menuEl.addEventListener('scroll', function (e) {
+    if (!small.matches || !e.target.classList || !e.target.classList.contains('menu-grid')) return;
+    clearTimeout(swipeT); swipeT = setTimeout(function () {
+      var group = MENU[shelf][cat[shelf]], list = group.items, n = perPage(), pages = Math.ceil(list.length / n), best = 0, bd = 1e9;
+      for (var p = 0; p < pages; p++) { var d = Math.abs(list[p * n].offsetLeft - list[0].offsetLeft - e.target.scrollLeft); if (d < bd) { bd = d; best = p; } }
+      if (best !== page) { page = best; renderPager(pages); }
+    }, 120);
+  }, true);
   function renderMenu() {
     var group = MENU[shelf][cat[shelf]], list = group.items, n = perPage(), pages = Math.max(1, Math.ceil(list.length / n));
     page = Math.max(0, Math.min(pages - 1, page));
@@ -29,7 +39,20 @@
       return '<button class="menu-cat" type="button" aria-pressed="' + (i === cat[shelf]) + '" data-cat="' + i + '">' + esc(g.cat) + ' <span class="menu-cat__n">' + g.items.length + '</span></button>';
     }).join('') + '</div>';
     SHELVES.forEach(function (s) { MENU[s[0]].forEach(function (g) { g.el.hidden = g !== group; }); });
-    list.forEach(function (it, i) { it.hidden = i < page * n || i >= page * n + n; });
+    var swipe = small.matches, grid = group.el.querySelector('.menu-grid');
+    menuEl.classList.toggle('is-swipe', swipe);
+    // phones: every page sits side by side in one row you can swipe through (2×4 cards each, still in reading order);
+    // larger screens: only the current page's cards show
+    list.forEach(function (it, i) {
+      var j = i % n, pg = Math.floor(i / n);
+      it.hidden = !swipe && (i < page * n || i >= page * n + n);
+      it.style.gridRow = swipe ? String(Math.floor(j / 2) + 1) : '';
+      it.style.gridColumn = swipe ? String(pg * 2 + j % 2 + 1) : '';
+    });
+    if (swipe) { var to = list[page * n]; if (to) { var target = to.offsetLeft - list[0].offsetLeft; if (Math.abs(grid.scrollLeft - target) > 2) grid.scrollTo({ left: target, behavior: menuSmooth ? 'smooth' : 'auto' }); } menuSmooth = false; }
+    renderPager(pages);
+  }
+  function renderPager(pages) {
     pagerEl.innerHTML = pages > 1 ? '<nav class="menu-pager" aria-label="Menu pages"><button class="cb-btn cb-btn--plain menu-pager__btn" data-page="-1"' + (page ? '' : ' disabled') + ' aria-label="Previous page">&lt;</button>' +
       '<span class="menu-pager__dots">' + Array.apply(null, Array(pages)).map(function (_, i) {
         return '<button class="menu-pager__dot" data-goto="' + i + '" aria-label="Page ' + (i + 1) + '"' + (i === page ? ' aria-current="page"' : '') + '></button>';
@@ -52,7 +75,7 @@
   $('menu').addEventListener('click', function (e) {
     var b = e.target.closest('[data-page],[data-goto]'); if (!b || b.disabled) return;
     var had = document.activeElement === b;
-    page = b.dataset.goto != null ? +b.dataset.goto : page + +b.dataset.page; renderMenu();
+    page = b.dataset.goto != null ? +b.dataset.goto : page + +b.dataset.page; menuSmooth = true; renderMenu();
     if (b.dataset.goto != null) refocus(had, '#menu [data-goto="' + page + '"]');
     else refocus(had, '#menu [data-page="' + b.dataset.page + '"]', '#menu [data-page="' + -b.dataset.page + '"]');
   });
