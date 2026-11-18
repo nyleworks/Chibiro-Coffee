@@ -133,25 +133,25 @@
     // furniture in the yard: a 1×3 block of table sets on the left and a 3×3 block on the right, with a
     // paved walkway between them running from the front door toward the viewer. Everything is drawn at a
     // depth scale (sc): smaller near the house, larger near the curb.
-    var small = W < 300;
+    var small = W < 300, phone = P === 2;                                        // phones drop the front row so the yard can be drawn bigger (Niekki)
     doorX = house.x + Math.round(house.w * 0.1) + 5;
     openStand = { x: doorX + 18, yb: yardTop + 4 };                             // on the porch slab, just right of the front door
     var G, CG, Lu, Ru, rowY = [], topMin = yardTop + 10, aisle = 0;
     function spacing(roomy) {                                                    // walkway half-width, walkway-to-set gap, gap between columns (set units);
-      WH = roomy ? 10 : 7; G = roomy ? 6 : 3; CG = roomy ? 18 : 5;               // roomy leaves aisles wide enough to walk through
+      WH = roomy ? 10 : (phone ? 6 : 7); G = roomy ? 6 : (phone ? 2 : 3); CG = roomy ? 18 : (phone ? 3 : 5);   // roomy leaves aisles wide enough to walk through
       Lu = WH + G + 46; Ru = WH + G + 138 + 2 * CG; aisle = roomy ? 0 : 1;   // compact (phones): no aisles between columns, so keep aisles between rows
     }
     function minGap() { return aisle ? Math.ceil(17 * fitK) : 0; }               // room for a cat to walk between two rows
     function stack(e) {                                                          // rows from the bottom edge up, each set clear of the row behind
       var y3 = H - 2, y2 = Math.floor(y3 - 27 * sc(y3) - 1 - e), y1 = Math.floor(y2 - 27 * sc(y2) - 1 - e);
-      return [y1, y2, y3];
+      return phone ? [y2, y3] : [y1, y2, y3];
     }
     function blockFits(rows) {
       if (rows[0] - 27 * sc(rows[0]) < topMin) return false;
-      var kb = sc(H - 2); walkB = clamp(Math.round(W / 2 - (Ru - Lu) / 2 * kb), Math.ceil(6 + Lu * kb), Math.floor(W - 6 - Ru * kb));
-      return rows.every(function (y) { var k = sc(y), xw = walkX(y); return xw - Lu * k >= 6 && xw + Ru * k <= W - 6; });   // the corner poles keep the edges
+      var kb = sc(H - 2), mg = phone ? 4 : 6; walkB = clamp(Math.round(W / 2 - (Ru - Lu) / 2 * kb), Math.ceil(mg + Lu * kb), Math.floor(W - mg - Ru * kb));
+      var m = phone ? 4 : 6; return rows.every(function (y) { var k = sc(y), xw = walkX(y); return xw - Lu * k >= m && xw + Ru * k <= W - m; });   // the corner poles keep the edges
     }
-    function fit() { for (fitK = 1; fitK > 0.5; fitK -= 0.01) { rowY = stack(minGap()); if (blockFits(rowY)) break; } return fitK; }
+    function fit() { for (fitK = phone ? 1.5 : 1; fitK > 0.5; fitK -= 0.01) { rowY = stack(minGap()); if (blockFits(rowY)) break; } return fitK; }
     spacing(false); var tight = fit(); spacing(true);
     if (fit() < tight - 0.08) { spacing(false); fit(); }                        // narrow phones: the compact spacing keeps everything bigger
     var slack = rowY[0] - 27 * sc(rowY[0]) - topMin;                             // spare depth (phones): open up the aisles between rows
@@ -196,7 +196,7 @@
     standAt(c, Math.min(W - 6, house.x + house.w + 4), yardTop + 5, 27);
     var a = person(R, 'stand'), b2 = person(R, 'stand');                        // a pair chatting on their feet, beside the blocks
     a.face = 1; a.talker = 0; b2.face = -1; b2.talker = 1; b2.cup = true;
-    [rowY[1], rowY[2], rowY[0]].some(function (yb) {
+    rowY.slice(1).concat(rowY[0]).some(function (yb) {
       var k = sc(yb), gr = walkX(yb) + Ru * k, gl = walkX(yb) - Lu * k;
       return [gr + 4 + 13 * k, gl - 4 - 13 * k].some(function (x) {
         var box = [x - 13 * k, yb - 35 * k, x + 13 * k, yb + 1];

@@ -458,3 +458,14 @@ body { overflow-x: hidden; }
 .staff__status.is-bad { background: var(--strawberry-milk); }
 .staff__btn { width: 100%; }
 .staff__btn[hidden] { display: none; }
+
+/* ---------- Phones: the menu pages sit side by side and swipe sideways (Niekki, 2026-11-17) ---------- */
+@media (max-width: 767px) {
+  .menu.is-swipe .menu-grid {
+    grid-template-columns: none; grid-auto-columns: calc((100% - var(--space-3)) / 2);
+    overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none;
+    padding: 0 8px 6px 0; margin-bottom: -6px;   /* the right padding leaves room for the card shadows and lets the last page line up */
+  }
+  .menu.is-swipe .menu-grid::-webkit-scrollbar { display: none; }
+  .menu.is-swipe .cb-item:nth-child(8n + 1) { scroll-snap-align: start; }
+}
