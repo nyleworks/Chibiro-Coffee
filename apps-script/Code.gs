@@ -12,7 +12,8 @@
  *   one-way fingerprint (SHA-256) of that code, the member number, the stamps and dates.
  * - Only staff can add stamps or give free drinks. Those actions run only for the Google account that owns
  *   this script, signed in on the café phone (Google checks the password and 2-step verification).
- * - The public web app can do one thing: look up a card by its code, so the customer's card updates live.
+ * - The public web app can do two things with a card code: look the card up (so it updates live), and delete
+ *   that card when the customer taps "Delete my card". A deletion removes the card's row and logs "deleted".
  *
  * Rules
  * - 10 stamps = one free drink. Each stamp is one of the ten Chibiro cats. One visit is stamped per card
@@ -119,6 +120,9 @@ function buildSummary_(ss) {
   sh.getRange("E16").setValue("Stamps by hour");
   sh.getRange("E17").setFormula("=IFERROR(QUERY(Log!D2:H, \"select H, count(D) where D = 'stamp' group by H order by H label H 'Hour', count(D) 'Stamps'\", 0), \"No stamps yet\")");
   sh.getRange("I3").setValue("Free drinks by drink");
+  sh.getRange("A25").setValue("Deleted cards");
+  sh.getRange(26, 1, 2, 2).setValues([["Deleted by customers, all time", c("deleted")],
+    ["Deleted this month", '=COUNTIFS(Log!D2:D, "deleted", Log!A2:A, ">="&(EOMONTH(TODAY(), -1)+1))']]);
   sh.getRange("I4").setFormula("=IFERROR(QUERY(Log!D2:I, \"select I, count(D) where D = 'free_drink' and I <> '' group by I order by count(D) desc label I 'Drink', count(D) 'Free drinks'\", 0), \"None yet\")");
   styleSummary_(sh);
 }
@@ -181,6 +185,11 @@ function styleSummary_(sh) {
     sh.getRange(b[0], 2, b[1], 1).setFontFamily(LOOK.pixel).setFontSize(11).setFontColor(LOOK.matchaDeep).setHorizontalAlignment("right");
     for (var r = b[0]; r < b[0] + b[1]; r++) sh.setRowHeight(r, 28);
   });
+  // Deleted cards (A25:B27): customers who tapped "Delete my card" on the website
+  sh.setRowHeight(25, 32);
+  box_(sh, 25, 1, 3, 2, LOOK.milk, LOOK.berryDeep);
+  sh.getRange(26, 2, 2, 1).setFontFamily(LOOK.pixel).setFontSize(11).setFontColor(LOOK.berryDeep).setHorizontalAlignment("right");
+  [26, 27].forEach(function (r) { sh.setRowHeight(r, 28); });
   // Cats collected (E3:F13) and the two query boxes
   box_(sh, 3, 5, 11, 2, LOOK.matchaDeep, LOOK.cream);
   sh.getRange(4, 6, 10, 1).setFontFamily(LOOK.pixel).setFontSize(11).setFontColor(LOOK.berryDeep).setHorizontalAlignment("right");
@@ -223,7 +232,8 @@ function styleLog_(sh) {
     return SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(text).setBackground(bg).setFontColor(ink).setRanges([ev]).build();
   };
   sh.setConditionalFormatRules([
-    rule("stamp", LOOK.foam, LOOK.matchaDeep), rule("free_drink", LOOK.berry, LOOK.roast), rule("expired", LOOK.paper2, LOOK.soft)
+    rule("stamp", LOOK.foam, LOOK.matchaDeep), rule("free_drink", LOOK.berry, LOOK.roast), rule("expired", LOOK.paper2, LOOK.soft),
+    rule("deleted", LOOK.milk, LOOK.berryDeep)
   ]);
   sh.getRange("C2:C").setFontFamily(LOOK.pixel).setFontSize(8).setFontColor(LOOK.berryDeep).setHorizontalAlignment("center");
   sh.getRange("E2:E").setHorizontalAlignment("center");
@@ -240,13 +250,14 @@ function doGet(e) {
   return json_({ ok: true, service: "chibiro-cat-stamp-card" });
 }
 
-// POST from the website: the only public action is looking up a card by its code.
+// POST from the website: look up a card by its code, or delete it (the customer tapped "Delete my card").
 function doPost(e) {
   try {
     var body = (e && e.postData && e.postData.contents) || "{}";
     if (body.length > 200) return json_({ ok: false, error: "bad_request" });   // a real lookup is about 60 characters
     var req = JSON.parse(body);
     if (req.action === "card") return json_(lookup_(req.card));
+    if (req.action === "delete") return json_(deleteCard_(req.card));
     return json_({ ok: false, error: "bad_request" });
   } catch (err) {
     console.error(err);
@@ -271,6 +282,23 @@ function lookup_(code) {
   return out;
 }
 function forget_(code) { CacheService.getScriptCache().remove("v:" + fingerprint_(code)); }
+
+// "Delete my card" on the website: only someone holding the card's code can do this. The card's row leaves the
+// Cards tab and the Log gets a "deleted" row (member number and how many stamps it had), so it shows in the sheet.
+// The member number is never handed out again (nextMember_ also reads the Log).
+function deleteCard_(code) {
+  if (!validCode_(code)) return { ok: false, error: "bad_card" };
+  return withLock_(function () {
+    var sh = cardsSheet_(), found = findCard_(sh, fingerprint_(code));
+    if (found) {
+      var c = found.data, v = view_(c);
+      log_(new Date(), c.member, "deleted", v.stamps, "", "");
+      sh.deleteRow(found.row);
+    }
+    forget_(code);
+    return { ok: true, deleted: true };
+  });
+}
 
 // ---------------------------------------------------------------------------------------------------------
 // Staff actions, called from the staff page with google.script.run. Each one checks the signed-in account.
