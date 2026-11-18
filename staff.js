@@ -3,8 +3,8 @@
    staff link below, with a 22-character card code: any other QR code (a web link, a fake sign-in page) is ignored.
    Uses the phone's built-in QR reader where there is one (Android Chrome), otherwise jsQR.js (iPhone Safari). */
 (function () {
-  // The staff deployment's link. Keep it the same as STAMP_STAFF in app.js.
-  var STAMP_STAFF = 'https://script.google.com/macros/s/AKfycbzCwCftbNpsDwIqmo1EqXWAJ1WeKWnyd1YudxPhTHwZ08Os7h2pCUfgBEONVk77mDHw/exec';
+  // The staff deployment's link, from config.js (shared with the main page)
+  var STAMP_STAFF = (window.CHIBIRO_LINKS || {}).staff || '';
   var video = document.getElementById('cam'), canvas = document.getElementById('frame'), status = document.getElementById('status'), btn = document.getElementById('start');
   var stream = null, detector = null, timer = 0, busy = false, lastBad = '';
 
@@ -21,6 +21,7 @@
       if (text !== lastBad) { lastBad = text; say('That QR code isn\'t a Chibiro stamp card, so nothing was opened. Ask the customer to open their card on the Chibiro site.', true); }
       return false;
     }
+    if (!STAMP_STAFF) { stop(); say('The staff page link is missing. It goes in config.js on the website.', true); return true; }
     stop(); say('Card found. Opening the staff page…');
     location.href = STAMP_STAFF + '?card=' + encodeURIComponent(code);
     return true;
@@ -40,9 +41,16 @@
     var img = g.getImageData(0, 0, canvas.width, canvas.height), r = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
     return Promise.resolve(r ? r.data : null);
   }
+  // one bad camera frame must never stop the scanning: an error just skips that frame
   function loop() {
     if (!stream || busy) return; busy = true;
-    read().then(function (text) { busy = false; if (text && found(text)) return; timer = setTimeout(loop, 150); });
+    var next;
+    try { next = read(); } catch (e) { next = Promise.resolve(null); }
+    next.catch(function () { return null; }).then(function (text) {
+      busy = false;
+      if (text && found(text)) return;
+      if (stream) timer = setTimeout(loop, 150);
+    });
   }
   btn.addEventListener('click', function () {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { say('This browser can\'t use the camera here. Open this page in Safari or Chrome.', true); return; }
@@ -56,4 +64,10 @@
     });
   });
   document.addEventListener('visibilitychange', function () { if (document.hidden && stream) { stop(); say('Camera paused. Tap Start camera to scan again.'); } });
+  // Back from the staff page: the browser may show this page as it was left ("Card found…"), so start it fresh
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return;
+    stop(); busy = false; lastBad = '';
+    say('Tap Start camera, then hold the customer\'s QR code in the box.');
+  });
 })();

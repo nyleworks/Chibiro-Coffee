@@ -5,7 +5,7 @@
    On either side are the neighbours (a blue house on
    the left, a white semi-D on the right), with power lines, a water tank and trees behind.
    Drawn on a low-res canvas and scaled up with crisp pixels. The café opens 3 PM to 12:08 AM, so
-   it only cycles Sunset ⇄ Night, and the "Sky" button jumps to the other one. Visitors start on
+   it only cycles Sunset ⇄ Night, on its own (sunset holds 5 s, night 15 s). Visitors start on
    the phase that matches their local time. */
 (function () {
   var hero = document.getElementById('top'), cvs = document.getElementById('scene'),
@@ -300,12 +300,19 @@
     for (i = 0; i < nC; i++) clouds.push({ x: R() * (W + 40) - 20, y: Math.round(skyTop + 6 + R() * Math.max(6, (house.top - skyTop) * 0.45)), s: R() < 0.45 ? 2 : 1, v: 0.6 + R() * 0.9 });
     birds = []; for (i = 0; i < 3; i++) birds.push({ x: R() * W, y: skyTop + 8 + R() * Math.max(8, (house.top - skyTop) * 0.5), v: 4 + R() * 4, ph: R() * 2 });
     flies = []; for (i = 0; i < 7; i++) { var fy0 = yardTop + R() * yd; flies.push({ x: edgeL(fy0) + R() * (edgeR(fy0) - edgeL(fy0)), y: fy0 - 6, ph: R() * 6.3 }); }
-    skyImg = ctx.createImageData(W, Math.max(1, yardTop));
+    skyImg = ctx.createImageData(W, Math.max(1, yardTop)); skyKey = '';
   }
 
+  var laidOut = '';   // the size the yard was last laid out for
   function resize() {
     var cw = hero.clientWidth, ch = hero.clientHeight;
     if (!cw || !ch) return;
+    // the resize watcher and the fonts finishing loading both call this at start-up: when nothing has changed, keep the
+    // layout as it is (laying it out again would send every cat and the yarn ball to new spots)
+    var top0 = hero.getBoundingClientRect().top, P0 = cw < 768 ? 2 : 3;
+    var key = cw + 'x' + ch + ':' + (copy ? clamp(Math.round((copy.getBoundingClientRect().bottom - top0) / P0) + 3, 0, Math.round(Math.ceil(ch / P0) * 0.7)) : 0);
+    if (key === laidOut) { placeMenuLink(); return; }
+    laidOut = key;
     P = cw < 768 ? 2 : 3;   // same pixel size as the cat sprites (64px / 96px cats = 2× / 3×)
     W = Math.ceil(cw / P); H = Math.ceil(ch / P);
     cvs.width = W; cvs.height = H; buf.width = W; buf.height = H;
@@ -373,7 +380,12 @@
     for (var i = 0; i < s.length; i++) { var g = GLYPH[s[i]]; for (var r = 0; r < 5; r++) for (var b = 0; b < 3; b++) if (g[r] >> (2 - b) & 1) ctx.fillRect(x + (i * 4 + b) * k, y + r * k, k, k); }
   }
 
-  function drawSky(p, sun, moon) {
+  // The sky only changes while it fades between sunset and night: during the holds the last picture is reused as it is
+  var skyKey = '';
+  function drawSky(p, sun, moon, f) {
+    var k = f.toFixed(5) + '|' + W + '|' + skyImg.height + '|' + sun[0].toFixed(2) + ',' + sun[1].toFixed(2) + '|' + moon[0].toFixed(2) + ',' + moon[1].toFixed(2);
+    if (k === skyKey) { ctx.putImageData(skyImg, 0, 0); return; }
+    skyKey = k;
     var d = skyImg.data, hz = skyImg.height, top = p.c.skyTop, mid = p.c.skyMid, low = p.c.skyLow, bands = 10;
     var sg = p.c.sunGlow, mg = p.c.moon, sA = p.sunGlowA, mA = 0.35 * clamp((p.stars - 0.18) / 0.82, 0, 1), sR = sun[2] * 3.4, mR = moon[2] * 3;
     for (var y = 0; y < hz; y++) {
@@ -889,7 +901,7 @@
     // on phones the house fills the width, so the sun sets at the right edge
     var narrow = W < 300, sun = [(narrow ? sk[0] + 0.07 : sk[0]) * W, skyTop + sk[1] * (narrow ? 0.7 : 1) * (horizon - skyTop), sk[2]], moon = [mk[0] * W, skyTop + mk[1] * span, mk[2]];
 
-    drawSky(p, sun, moon);
+    drawSky(p, sun, moon, f);
     if (p.stars > 0.02) for (var i = 0; i < stars.length; i++) {
       var s = stars[i], tw = reduce ? 1 : 0.55 + 0.45 * Math.sin(t * 0.002 + s.ph);
       ctx.globalAlpha = p.stars * tw; rect(s.x, s.y, 1, 1, '#fffdf7');
@@ -976,6 +988,10 @@
   if ('ResizeObserver' in window) { var ro = new ResizeObserver(resize); ro.observe(hero); if (copy) ro.observe(copy); }
   else window.addEventListener('resize', resize);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(resize);
+  // the hero is one screen tall minus the nav bar (app.js keeps --nav-h up to date). Set it now too, so the first layout
+  // already has the right height and app.js doesn't change it a moment later (which would lay the yard out twice)
+  var navBar = document.querySelector('.cb-nav');
+  if (navBar) document.documentElement.style.setProperty('--nav-h', navBar.offsetHeight + 'px');
   resize();
   start();
 })();

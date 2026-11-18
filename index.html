@@ -11,6 +11,7 @@
 <title>Chibiro Coffee — Home-Brewed Specialty Coffee in Likas</title>
 <meta name="description" content="Chibiro Coffee: cozy, cat-approved specialty coffee in Taman Jaya, Likas, Kota Kinabalu. Open Tuesday to Sunday, 3:08 PM – 12:08 AM.">
 <link rel="icon" href="assets/chibiro-favicon.svg">
+<link rel="canonical" href="https://nyleworks.github.io/Chibiro-Coffee/">
 <!-- link previews (WhatsApp, Facebook, X, Telegram…). og:image and og:url must be absolute: update the address if the site moves -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Chibiro Coffee">
@@ -20,7 +21,7 @@
 <meta property="og:image" content="https://nyleworks.github.io/Chibiro-Coffee/assets/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Pixel-art Chibiro Coffee café at sunset: the white two-storey house with a red awning, a neon OPEN sign, fairy lights and customers at tables in the yard.">
+<meta property="og:image:alt" content="Pixel-art Chibiro Coffee café at sunset: a ginger cat asleep on the CHIBIRO sign above the white two-storey house with its red awning, neon OPEN sign, fairy lights and customers at tables in the yard.">
 <meta property="og:locale" content="en_MY">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#fdf6e3">
@@ -35,8 +36,44 @@
 <link rel="preload" href="assets/fonts/press-start-2p-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/pixelify-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
+<!-- for Google: the café's details as structured data (address, hours, menu). Hours past midnight close "00:08" the next day. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CafeOrCoffeeShop",
+  "name": "Chibiro Coffee",
+  "description": "A cozy, cat-approved home café serving specialty coffee in Taman Jaya, Likas, Kota Kinabalu.",
+  "url": "https://nyleworks.github.io/Chibiro-Coffee/",
+  "image": "https://nyleworks.github.io/Chibiro-Coffee/assets/og-image.png",
+  "logo": "https://nyleworks.github.io/Chibiro-Coffee/assets/chibiro-icon-512.png",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Lorong Burung Segan, Taman Jaya",
+    "addressLocality": "Kota Kinabalu",
+    "addressRegion": "Sabah",
+    "postalCode": "88450",
+    "addressCountry": "MY"
+  },
+  "openingHoursSpecification": [{
+    "@type": "OpeningHoursSpecification",
+    "dayOfWeek": ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+    "opens": "15:08",
+    "closes": "00:08"
+  }],
+  "servesCuisine": ["Coffee", "Matcha", "Desserts"],
+  "priceRange": "RM 0.50 – RM 20",
+  "currenciesAccepted": "MYR",
+  "hasMenu": "https://nyleworks.github.io/Chibiro-Coffee/#brews",
+  "hasMap": "https://www.google.com/maps/search/?api=1&query=Chibiro+Coffee+Taman+Jaya+Likas+Kota+Kinabalu",
+  "amenityFeature": [
+    { "@type": "LocationFeatureSpecification", "name": "Free Wi-Fi", "value": true },
+    { "@type": "LocationFeatureSpecification", "name": "Free parking", "value": true }
+  ]
+}
+</script>
 </head>
 <body class="cb">
+  <a class="cb-skip" href="#main">Skip to content</a>
   <nav class="cb-nav" aria-label="Main">
     <a class="cb-nav__brand" href="#top" data-go="top"><img src="assets/chibiro-wordmark.svg" alt="Chibiro Coffee" width="84" height="43"></a>
     <button class="cb-nav__menu" id="navMenu" aria-expanded="false" aria-controls="navPanel" aria-label="Menu"><span class="cb-nav__bars" aria-hidden="true"></span></button>
@@ -46,6 +83,7 @@
       <li><a href="#photos" data-go="photos">Photos</a></li>
       <li><a href="#brews" data-go="brews">Our Brews</a></li>
       <li><a href="#visit" data-go="visit">Visit Us</a></li>
+      <li><a href="#about" data-go="about">About</a></li>
     </ul>
     <div class="cb-nav__tools">
       <button class="cb-toggle" id="soundToggle" role="switch" aria-checked="false"><span>Sound FX</span><span class="cb-toggle__track"></span><span class="cb-toggle__state">Off</span></button>
@@ -54,7 +92,7 @@
     </div>
   </nav>
 
-  <main id="main">
+  <main id="main" tabindex="-1">
   <header class="hero" id="top">
     <canvas class="hero__scene" id="scene" aria-hidden="true"></canvas>
     <div class="hero__body">
@@ -95,7 +133,7 @@
       <h2 class="cb-section__title">Chibiro Stamp Card</h2>
       <p class="cb-section__lead">Every visit earns a cat stamp. Collect all ten cats, and the next drink is on us.</p>
       <div class="stamps">
-        <div class="stamp-card" id="stampCard" aria-live="polite"></div>
+        <div class="stamp-card" id="stampCard"></div>
         <div class="stamp-how" id="stampSide">
           <h3 class="stamp-how__title">How it works</h3>
           <ol class="stamp-steps">
@@ -115,6 +153,7 @@
     <div class="cb-section__inner">
       <h2 class="cb-section__title">Photo Dump</h2>
       <p class="cb-section__lead">Snap your visit, post it on Instagram and tag Chibiro Coffee. We pick our 10 favourite shots and hang them up here.</p>
+      <p class="photos__note">Please keep your stamp card's QR code out of the picture: anyone who scans it can use your card.</p>
     </div>
     <div class="photo-line">
       <button class="photo-line__btn photo-line__btn--prev" type="button" data-photos="-1" aria-label="Previous photos"></button>
@@ -269,7 +308,7 @@
         </section>
       </div>
       <div class="visit__links">
-        <a class="cb-btn" href="https://www.google.com/maps/search/?api=1&query=Chibiro+Coffee+Taman+Jaya+Likas+Kota+Kinabalu" target="_blank" rel="noopener">Open in Google Maps</a>
+        <a class="cb-btn" href="https://www.google.com/maps/search/?api=1&amp;query=Chibiro+Coffee+Taman+Jaya+Likas+Kota+Kinabalu" target="_blank" rel="noopener">Open in Google Maps</a>
       </div>
     </div>
   </section>
@@ -297,6 +336,7 @@
 
 <!-- qrcode.js is loaded by app.js only when a stamp card needs its QR code -->
 <script src="scene.js" defer></script>
+<script src="config.js" defer></script>
 <script src="app.js" defer></script>
 </body>
 </html>
