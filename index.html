@@ -24,9 +24,12 @@
 <meta property="og:locale" content="en_MY">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#fdf6e3">
-<!-- "Add to Home Screen": no start_url on purpose, so iPhones open the exact page they were added from (with the card in it) -->
-<link rel="manifest" href="manifest.webmanifest">
+<!-- "Add to Home Screen". The manifest link is added by app.js on Android/desktop only: iPhones then save the exact
+     address on screen (which carries the card), instead of the manifest's start address. -->
 <link rel="apple-touch-icon" href="assets/chibiro-icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Chibiro">
 <!-- the two pixel fonts are hosted here (assets/fonts, OFL licence), so no visitor data goes to Google; font-display: swap in styles.css -->
 <link rel="preload" href="assets/fonts/press-start-2p-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -101,6 +104,7 @@
             <li><span class="stamp-steps__n">3</span><span>Collect all ten cats, and your next drink is free.</span></li>
           </ol>
           <button class="cb-btn cb-btn--berry" type="button" data-stamp="get">Get my card</button>
+          <button class="stamp-link" type="button" data-stamp="load">I have a saved card picture</button>
           <p class="stamp-how__note">Your member number arrives with your first stamp. A card expires if a month goes by with no new stamp.</p>
         </div>
       </div>

@@ -89,8 +89,9 @@ function buildSummary_(ss) {
   var c = function (ev) { return '=COUNTIF(Log!D2:D, "' + ev + '")'; };
   // A4:B13 is also shown on the staff page (staffSummary), so keep those 10 rows where they are.
   var stats = [
-    ["Members (cards with a number)", '=IFERROR(COUNTUNIQUE(FILTER(Log!C2:C, ' + visit + ')), 0)'],
-    ["Active members, last 30 days", '=IFERROR(COUNTUNIQUE(FILTER(Log!C2:C, ' + visit + ', Log!A2:A>=NOW()-30)), 0)'],
+    // ROWS(UNIQUE(FILTER())) inside IFERROR gives 0 on an empty Log (COUNTUNIQUE would count FILTER's #N/A as 1)
+    ["Members (cards with a number)", '=IFERROR(ROWS(UNIQUE(FILTER(Log!C2:C, ' + visit + ', Log!C2:C<>""))), 0)'],
+    ["Active members, last 30 days", '=IFERROR(ROWS(UNIQUE(FILTER(Log!C2:C, ' + visit + ', Log!C2:C<>"", Log!A2:A>=NOW()-30))), 0)'],
     ["Stamps this week (from Monday)", '=COUNTIFS(Log!D2:D, "stamp", Log!A2:A, ">="&(TODAY()-WEEKDAY(TODAY(), 3)))'],
     ["Stamps this month", '=COUNTIFS(Log!D2:D, "stamp", Log!A2:A, ">="&(EOMONTH(TODAY(), -1)+1))'],
     ["Stamps, all time", c("stamp")],
