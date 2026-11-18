@@ -421,6 +421,32 @@
     return c;
   }
   // the little dark grey cat asleep on the porch sofa (only in the hero, not on the stamp card)
+  // ---- About Us pop-up: the "See More" button opens it; Meet Our Team shows the 10 cats from the hero and footer ----
+  (function () {
+    var dlg = document.getElementById('aboutDialog'), more = document.getElementById('aboutMore'), list = document.getElementById('teamList');
+    if (!dlg || !more || !list) return;
+    var built = false;
+    function build() {
+      if (built) return; built = true;
+      BREEDS.forEach(function (B) {
+        var li = document.createElement('li'), fr = document.createElement('span'), c = document.createElement('canvas'), nm = document.createElement('span');
+        li.className = 'team__cat'; fr.className = 'team__frame'; nm.className = 'team__name';
+        c.width = c.height = 36; c.setAttribute('role', 'img'); c.setAttribute('aria-label', B.name);
+        c.getContext('2d').drawImage(drawCat(B, { pose: 'sit', step: 0, tail: 1, ear: 0, eyes: 'open' }), 3, 2);
+        nm.textContent = B.name;
+        fr.appendChild(c); li.appendChild(fr); li.appendChild(nm); list.appendChild(li);
+      });
+    }
+    more.addEventListener('click', function () {
+      build();
+      if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+      dlg.querySelector('.about-pop__body').scrollTop = 0;
+    });
+    function close() { if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
+    dlg.addEventListener('click', function (e) { if (e.target === dlg || e.target.closest('[data-about-close]')) close(); });   // tap the dim edge or the X
+    dlg.addEventListener('close', function () { more.focus(); });
+  })();
+
   var SOFA_BREED = { name: 'Charcoal', eye: '#e0c030', ears: 'up', col: function (p, x, y, k) {
     var D = '#55555e', D2 = '#6a6a74', L = '#7c7c86', S = '#3e3e46';
     if (p === 'head') { if (y > 1.6 && Math.abs(x) < 3) return L; return y < -3.6 ? D2 : D; }
@@ -462,7 +488,7 @@
     var scanned = hash.get('card'), staffSetting = hash.get('staff-phone');   // only #card=: the part after # never leaves the phone
     if (validCode(scanned) && STAMP_STAFF && load(STAFF_KEY) === '1') { location.replace(STAMP_STAFF + '?card=' + encodeURIComponent(scanned)); return; }
 
-    var state = { code: load(CARD_KEY), card: null, msg: null, fresh: [], error: false, paused: false };
+    var state = { code: load(CARD_KEY), card: null, msg: null, fresh: [], error: false, paused: false, homeHint: false };
     if (!validCode(state.code)) state.code = null;
 
     // ---- talking to the sheet (or the in-browser preview) ----
@@ -558,6 +584,8 @@
       if (!state.code) {                                  // no card yet: the sample card and how it works
         cardEl.innerHTML = cardHTML(SAMPLE, true); cardEl.classList.add('is-sample'); fill();
         if (side.dataset.mode !== 'intro') { side.innerHTML = sideHTML; side.dataset.mode = 'intro'; }
+        var old = side.querySelector('.stamp-msg'); if (old) old.remove();
+        if (state.msg) { var m = document.createElement('p'); m.className = 'stamp-msg' + (state.msg.ok ? ' stamp-msg--ok' : ''); m.setAttribute('role', 'status'); m.textContent = state.msg.text; side.insertBefore(m, side.children[1] || null); state.msg = null; }
         return;
       }
       cardEl.classList.remove('is-sample');
@@ -572,10 +600,17 @@
       if (c && c.stampedToday && c.stamps < SIZE) h += '<p class="stamp-how__note"><b>Today\'s cat is collected.</b> See you again soon!</p>';
       if (demo) h += '<button class="cb-btn cb-btn--plain" type="button" data-stamp="demo">' + (c && c.stamps >= SIZE ? 'Preview: give the free drink' : 'Preview: add a stamp') + '</button>';
       else h += state.paused || state.error ? '<button class="stamp-link" type="button" data-stamp="check">Check for stamps</button>' : '<p class="stamp-live"><span class="stamp-live__dot" aria-hidden="true"></span>Live: new stamps appear here</p>';
-      h += '<p class="stamp-small">Keep a screenshot of this card. If your phone ever loses it, scan the screenshot with your camera to bring it back.</p>' +
-        '<div class="stamp-links"><button class="stamp-link" type="button" data-stamp="copy">Copy my card link</button><button class="stamp-link" type="button" data-stamp="paste">Paste a card link</button>' +
-        (validCode(load(PREV_KEY)) && load(PREV_KEY) !== state.code ? '<button class="stamp-link" type="button" data-stamp="back">Switch back to my other card</button>' : '') + '</div>' +
-        '<p class="stamp-small">No sign-up. We don\'t ask for your name or phone number.</p>';
+      h += '<div class="stamp-keep"><h4 class="stamp-keep__title">Keep your card safe</h4>' +
+        '<button class="cb-btn cb-btn--plain" type="button" data-stamp="save">Save my card</button>' +
+        '<p class="stamp-small">Saves your card\'s QR code as a picture. New phone or cleared browser? Scan the picture with your camera and your card comes back.</p>';
+      if (canHome()) h += '<button class="stamp-link" type="button" data-stamp="home">Add Chibiro to your Home Screen</button>';
+      if (state.homeHint) h += '<div class="stamp-home" role="note"><p class="stamp-home__title">On iPhone or iPad, in Safari:</p><ol class="stamp-home__steps">' +
+        '<li>Tap the Share button <span class="stamp-home__share" aria-label="Share"></span> at the bottom (or top) of Safari.</li><li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>' +
+        '<p class="stamp-small">Your card comes along and opens from the Chibiro icon like an app, so it\'s much less likely to get cleared.</p>' +
+        '<button class="stamp-link" type="button" data-stamp="homeclose">Done</button></div>';
+      if (validCode(load(PREV_KEY)) && load(PREV_KEY) !== state.code) h += '<button class="stamp-link" type="button" data-stamp="back">Switch back to my other card</button>';
+      h += '<button class="stamp-link stamp-link--delete" type="button" data-stamp="delete">Delete my card</button>';
+      h += '</div><p class="stamp-small">No sign-up. We don\'t ask for your name or phone number.</p>';
       side.innerHTML = h; side.dataset.mode = 'card';
       state.fresh = [];
     }
@@ -584,6 +619,7 @@
     // Gentle on the Google script (it allows only about 30 lookups at once, shared with the staff page):
     // ask every 6 s for the first minute, then every 12 s, and pause after 2 minutes until the customer taps "Check".
     var poll = { timer: 0, until: 0, from: 0, busy: false }, onScreen = false;
+    function stopLive() { clearTimeout(poll.timer); poll.until = 0; }
     function startLive() { poll.from = Date.now(); poll.until = poll.from + 2 * 60000; if (state.paused) { state.paused = false; render(); } clearTimeout(poll.timer); check(); }
     function check() {
       if (poll.busy || !state.code) return; poll.busy = true;
@@ -596,6 +632,87 @@
     }
     if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { var was = onScreen; onScreen = es[0].isIntersecting; if (onScreen && !was && state.code) startLive(); }).observe(cardEl);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && onScreen && state.code) startLive(); });
+
+    // ---- "Add to Home Screen": Android/desktop Chrome offer their own install prompt; iPhones need the Share menu ----
+    var installEvt = null;
+    var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    function standalone() { return navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches); }
+    function canHome() { return !demo && !standalone() && (!!installEvt || isIOS); }
+    window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installEvt = e; if (state.code) render(); });
+    window.addEventListener('appinstalled', function () { installEvt = null; if (state.code) say('Chibiro is on your Home Screen. Your card opens from there.', true); });
+
+    // ---- "Save my card": a picture of the card's QR code. Scanning it with a camera opens the site with #card=… and the card comes back ----
+    function loadImg(src) { return new Promise(function (ok) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = function () { ok(null); }; i.src = src; }); }
+    function cardImage(code) {
+      var Wd = 540, Ht = 820, cv = document.createElement('canvas'), x = cv.getContext('2d');
+      cv.width = Wd; cv.height = Ht; x.imageSmoothingEnabled = false;
+      var heads = []; for (var i = 0; i < SIZE; i++) heads.push(loadImg(headURL(i)));
+      var fonts = document.fonts ? Promise.all([document.fonts.load('20px "Press Start 2P"'), document.fonts.load('22px "Pixelify Sans"')]).catch(function () {}) : Promise.resolve();
+      return Promise.all([loadImg(LOGO), fonts].concat(heads)).then(function (r) {
+        var logo = r[0], hs = r.slice(2), mid = Wd / 2;
+        x.fillStyle = '#2c1a12'; x.fillRect(0, 0, Wd, Ht);
+        x.fillStyle = '#fdf6e3'; x.fillRect(8, 8, Wd - 16, Ht - 16);
+        x.fillStyle = '#e8d3a6'; [[22, 22, Wd - 44, 3], [22, Ht - 25, Wd - 44, 3], [22, 22, 3, Ht - 44], [Wd - 25, 22, 3, Ht - 44]].forEach(function (b) { x.fillRect(b[0], b[1], b[2], b[3]); });
+        if (logo) x.drawImage(logo, mid - 126, 44, 252, 129);
+        x.fillStyle = '#2c1a12'; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+        x.font = '20px "Press Start 2P", monospace'; x.fillText('STAMP CARD', mid, 212);
+        var no = state.card && state.card.member ? 'MEMBER NO.' + pad(state.card.member) : '';
+        x.fillStyle = '#6b4a3a'; x.font = '12px "Press Start 2P", monospace'; if (no) x.fillText(no, mid, 238);
+        var q = qrcode(0, 'M'); q.addData(cardLink(code)); q.make();
+        var n = q.getModuleCount(), cell = Math.floor(340 / (n + 4)), size = cell * (n + 4), qx = Math.round(mid - size / 2), qy = 258;
+        x.fillStyle = '#2c1a12'; x.fillRect(qx - 6, qy - 6, size + 12, size + 12);
+        x.fillStyle = '#ffffff'; x.fillRect(qx, qy, size, size);
+        x.fillStyle = '#2c1a12';
+        for (var rr = 0; rr < n; rr++) for (var cc = 0; cc < n; cc++) if (q.isDark(rr, cc)) x.fillRect(qx + (cc + 2) * cell, qy + (rr + 2) * cell, cell, cell);
+        var ty = qy + size + 44;
+        x.font = '22px "Pixelify Sans", monospace'; x.fillStyle = '#2c1a12';
+        x.fillText('Lost your card? Scan this with', mid, ty); x.fillText('your phone camera to bring it back.', mid, ty + 28);
+        var hy = ty + 56, gap = 6, hw = 40, total = SIZE * hw + (SIZE - 1) * gap, hx = mid - total / 2;
+        hs.forEach(function (im, k) { if (im) x.drawImage(im, hx + k * (hw + gap), hy, hw, hw); });
+        x.font = '10px "Press Start 2P", monospace'; x.fillStyle = '#6b4a3a'; x.fillText('CHIBIRO COFFEE · LIKAS', mid, Ht - 44);
+        return new Promise(function (ok) { cv.toBlob(function (b) { ok(b); }, 'image/png'); });
+      });
+    }
+    function saveCard(btn) {
+      if (typeof qrcode !== 'function') { loadQr(); say('One moment, getting your card ready. Tap Save my card again.', false); return; }
+      btn.disabled = true;
+      cardImage(state.code).then(function (blob) {
+        btn.disabled = false;
+        if (!blob) { say('Couldn\'t make the picture. Take a screenshot of your QR code instead.', false); return; }
+        var name = 'chibiro-stamp-card.png', file = null;
+        try { file = new File([blob], name, { type: 'image/png' }); } catch (e) { file = null; }
+        // Phones: the share sheet has "Save Image" (iPhone) or "Save to Photos/Gallery". Computers: a normal download.
+        if (file && navigator.canShare && navigator.canShare({ files: [file] }) && /Mobi|Android|iP(hone|ad|od)/.test(navigator.userAgent + (isIOS ? ' iPad' : ''))) {
+          navigator.share({ files: [file], title: 'My Chibiro stamp card' })
+            .then(function () { say('Saved! Keep the picture in your photos. Scan it with your camera if your card ever goes missing.', true); },
+              function (e) { if (e && e.name === 'AbortError') return; download(blob, name); });
+        } else download(blob, name);
+      });
+    }
+    function download(blob, name) {
+      var a = document.createElement('a'), url = URL.createObjectURL(blob);
+      a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      say('Your card picture is downloaded. Keep it in your photos. Scan it with your camera if your card ever goes missing.', true);
+    }
+
+    // ---- "Delete my card": removes the card from the Google Sheet (logged there as "deleted") and from this phone ----
+    function deleteCard(btn) {
+      var n = state.card ? state.card.stamps : 0;
+      if (!window.confirm('Delete your Chibiro stamp card for good?\n\n' + (n ? 'Your ' + n + ' stamp' + (n > 1 ? 's' : '') + ' will be lost. ' : '') + 'This can\'t be undone, and a saved card picture will stop working.')) return;
+      var gone = function () {
+        stopLive(); store(CARD_KEY, null); if (demo) store(DEMO_KEY, null);
+        state.code = null; state.card = null; state.homeHint = false; state.msg = { text: 'Your card is deleted. You can get a new one any time.', ok: true };
+        if (/card=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search + '#stamps');
+        render();
+      };
+      if (demo) { gone(); return; }
+      btn.disabled = true;
+      fetch(STAMP_API, { method: 'POST', body: JSON.stringify({ action: 'delete', card: state.code }), redirect: 'follow' })
+        .then(function (r) { return r.json(); })
+        .then(function (r) { if (r && r.ok) gone(); else throw new Error('not deleted'); })
+        .catch(function () { btn.disabled = false; say('Couldn\'t delete your card right now. Check your internet and try again.', false); });
+    }
 
     function say(text, ok) { state.msg = { text: text, ok: ok }; render(); }
     // A card link or a pasted link only replaces this phone's card after asking. The card it replaces is kept,
@@ -615,19 +732,15 @@
       else if (act === 'check') { state.msg = null; startLive(); }
       else if (act === 'back') { var prev = load(PREV_KEY); if (validCode(prev)) { store(PREV_KEY, state.code); state.code = prev; store(CARD_KEY, prev); state.card = null; say('Switched back to your other card.', true); startLive(); } }
       else if (act === 'demo') { var before = state.card; state.card = before; apply(demoStamp()); render(); }
-      else if (act === 'copy') {
-        var link = cardLink(state.code);
-        (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(link) : Promise.reject())
-          .then(function () { say('Card link copied. Keep it somewhere safe.', true); }, function () { window.prompt('Copy your card link:', link); });
-      } else if (act === 'paste') {
-        var use = function (text) {
-          var m = /card=([A-Za-z0-9_-]{22})/.exec(text || '');
-          if (!m) { say('That isn\'t a card link. Open your card in the other browser and tap “Copy my card link” first.', false); return; }
-          if (switchTo(m[1])) { say('This card is now on this phone.', true); startLive(); } else render();
-        };
-        if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(use, function () { use(window.prompt('Paste your card link here:')); });
-        else use(window.prompt('Paste your card link here:'));
-      }
+      else if (act === 'save') saveCard(b);
+      else if (act === 'home') {
+        if (installEvt) { var ev = installEvt; installEvt = null; ev.prompt(); (ev.userChoice || Promise.resolve()).then(function () { render(); }); }
+        else {
+          // iPhones open a Home Screen icon at the address it was added from, so put the card in the address while the steps show
+          state.homeHint = true; history.replaceState(null, '', location.pathname + location.search + '#card=' + state.code); render();
+        }
+      } else if (act === 'delete') deleteCard(b);
+      else if (act === 'homeclose') { state.homeHint = false; history.replaceState(null, '', location.pathname + location.search + '#stamps'); render(); }
     });
 
     // ---- start ----

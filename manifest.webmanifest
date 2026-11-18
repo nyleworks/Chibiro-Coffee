@@ -1,0 +1,13 @@
+{
+  "name": "Chibiro Coffee",
+  "short_name": "Chibiro",
+  "description": "Home-brewed specialty coffee in Likas, with your Chibiro cat stamp card.",
+  "display": "standalone",
+  "background_color": "#fdf6e3",
+  "theme_color": "#fdf6e3",
+  "icons": [
+    { "src": "assets/chibiro-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/chibiro-icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/chibiro-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -24,6 +24,10 @@
 <meta property="og:locale" content="en_MY">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#fdf6e3">
+<!-- "Add to Home Screen": no start_url on purpose, so iPhones open the exact page they were added from (with the card in it) -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/chibiro-icon-180.png">
+<meta name="apple-mobile-web-app-title" content="Chibiro">
 <!-- the two pixel fonts are hosted here (assets/fonts, OFL licence), so no visitor data goes to Google; font-display: swap in styles.css -->
 <link rel="preload" href="assets/fonts/press-start-2p-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="assets/fonts/pixelify-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -60,6 +64,28 @@
     <a class="hero__menu-stand" id="menu-stand" href="#brews" data-go="brews" aria-label="See our menu" hidden><span class="hero__tap" aria-hidden="true"></span></a>
     <div class="hero__stage" id="stage" aria-hidden="true"></div>
   </header>
+
+  <section class="cb-section about" id="about">
+    <div class="cb-section__inner about__inner">
+      <h2 class="cb-section__title">About Us</h2>
+      <p class="about__ask">How did we come out with our name?</p>
+      <p class="about__text">Insert text</p>
+      <button class="cb-btn" type="button" id="aboutMore" aria-haspopup="dialog" aria-controls="aboutDialog">See More</button>
+    </div>
+  </section>
+
+  <dialog class="about-pop" id="aboutDialog" aria-labelledby="aboutPopTitle">
+    <button class="about-pop__close" type="button" data-about-close aria-label="Close"></button>
+    <div class="about-pop__body">
+      <h2 class="cb-section__title" id="aboutPopTitle">About Us</h2>
+      <p class="about__ask">How did we come out with our name?</p>
+      <p class="about__text">Insert text</p>
+      <h3 class="about-pop__head">Our Story</h3>
+      <p class="about__text">Insert text</p>
+      <h3 class="about-pop__head">Meet Our Team</h3>
+      <ul class="team" id="teamList"></ul>
+    </div>
+  </dialog>
 
   <section class="cb-section alt" id="stamps">
     <div class="cb-section__inner">
