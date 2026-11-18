@@ -137,18 +137,19 @@
     doorX = house.x + Math.round(house.w * 0.1) + 5;
     openStand = { x: doorX + 18, yb: yardTop + 4 };                             // on the porch slab, just right of the front door
     var G, CG, Lu, Ru, rowY = [], topMin = yardTop + 10, aisle = 0;
+    var baseY = H - 2 - (phone ? Math.round(H * 0.035) : 0);                      // phones: the front row sits a little up from the bottom edge (Niekki)
     function spacing(roomy) {                                                    // walkway half-width, walkway-to-set gap, gap between columns (set units);
       WH = roomy ? 10 : (phone ? 6 : 7); G = roomy ? 6 : (phone ? 2 : 3); CG = roomy ? 18 : (phone ? 3 : 5);   // roomy leaves aisles wide enough to walk through
       Lu = WH + G + 46; Ru = WH + G + 138 + 2 * CG; aisle = roomy ? 0 : 1;   // compact (phones): no aisles between columns, so keep aisles between rows
     }
     function minGap() { return aisle ? Math.ceil(17 * fitK) : 0; }               // room for a cat to walk between two rows
     function stack(e) {                                                          // rows from the bottom edge up, each set clear of the row behind
-      var y3 = H - 2, y2 = Math.floor(y3 - 27 * sc(y3) - 1 - e), y1 = Math.floor(y2 - 27 * sc(y2) - 1 - e);
+      var y3 = baseY, y2 = Math.floor(y3 - 27 * sc(y3) - 1 - e), y1 = Math.floor(y2 - 27 * sc(y2) - 1 - e);
       return phone ? [y2, y3] : [y1, y2, y3];
     }
     function blockFits(rows) {
       if (rows[0] - 27 * sc(rows[0]) < topMin) return false;
-      var kb = sc(H - 2), mg = phone ? 4 : 6; walkB = clamp(Math.round(W / 2 - (Ru - Lu) / 2 * kb), Math.ceil(mg + Lu * kb), Math.floor(W - mg - Ru * kb));
+      var kb = sc(baseY), mg = phone ? 4 : 6; walkB = clamp(Math.round(W / 2 - (Ru - Lu) / 2 * kb), Math.ceil(mg + Lu * kb), Math.floor(W - mg - Ru * kb));
       var m = phone ? 4 : 6; return rows.every(function (y) { var k = sc(y), xw = walkX(y); return xw - Lu * k >= m && xw + Ru * k <= W - m; });   // the corner poles keep the edges
     }
     function fit() { for (fitK = phone ? 1.5 : 1; fitK > 0.5; fitK -= 0.01) { rowY = stack(minGap()); if (blockFits(rowY)) break; } return fitK; }
