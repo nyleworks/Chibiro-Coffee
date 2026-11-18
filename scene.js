@@ -1,7 +1,7 @@
 /* Chibiro Coffee — hero backdrop.
    A pixel-art take on the real Chibiro: a two-storey white house in Taman Jaya with a carport,
    a red-awning porch with the red sofa, an upstairs balcony, grille windows and AC units. In
-   front is a gravel yard of folding tables, mesh camping chairs and a dome tent.
+   front is a gravel yard of folding tables, mesh camping chairs and a big open dome shelter over one set.
    On either side are the neighbours (a blue house on
    the left, a white semi-D on the right), with power lines, a water tank and trees behind.
    Drawn on a low-res canvas and scaled up with crisp pixels. The café opens 3 PM to 12:08 AM, so
@@ -20,8 +20,8 @@
   var RAW = [
     { skyTop: '#3d3a80', skyMid: '#c95f7c', skyLow: '#ffb35c', cloud: '#ffc490', cloudShade: '#c86c7c', sun: '#ffdc80', sunGlow: '#ff9a50',
       moon: '#f4ecd0', moonShade: '#c9c0a0', tint: '#8a4a6a', tintA: 0.3, glow: 0.55, stars: 0.18, sunGlowA: 0.85, birds: 1 },
-    { skyTop: '#0a0c24', skyMid: '#181d48', skyLow: '#2c3064', cloud: '#363d72', cloudShade: '#232854', sun: '#ffdc80', sunGlow: '#ff9a50',
-      moon: '#f6eed2', moonShade: '#c4bb9c', tint: '#12152e', tintA: 0.66, glow: 1, stars: 1, sunGlowA: 0, birds: 0 }
+    { skyTop: '#0a0c24', skyMid: '#181d48', skyLow: '#363c74', cloud: '#3c4378', cloudShade: '#232854', sun: '#ffdc80', sunGlow: '#ff9a50',
+      moon: '#f6eed2', moonShade: '#c4bb9c', tint: '#1c2246', tintA: 0.5, glow: 1, stars: 1, sunGlowA: 0, birds: 0 }
   ];
   var rgbCache = {};
   function rgb(h) { if (rgbCache[h]) return rgbCache[h]; var n = parseInt(h.slice(1), 16); return (rgbCache[h] = [n >> 16 & 255, n >> 8 & 255, n & 255]); }
@@ -41,7 +41,7 @@
     var v = tintCache[hex]; if (v) return v;
     return (tintCache[hex] = css(lerpC(rgb(hex), P_.c.tint, P_.tintA)));
   }
-  var WARM = '#ffe9a8', COOL = '#a8c4f0';
+  var WARM = '#ffe9a8';
   function lit(a) { return 'rgba(255,214,130,' + Math.max(0, Math.min(1, a)).toFixed(2) + ')'; }
 
   /* ---------- Timeline ---------- */
@@ -58,10 +58,10 @@
 
   /* ---------- Layout (rebuilt on resize) ---------- */
   var W = 0, H = 0, P = 3, skyTop = 0, panelB = 0, yardTop, yd;
-  var NAP = [".................o........o...", "................obo......obo..", "......ooooooooooobpoooooopbo..", "....oobbbbbbbbbbobpbbssbbpbo..", "...obbsbbbsbbbsbsbbbbsbbbbo...", "..obbbsbbbsbbbsbsbbbbbbbbbbo..", ".obbbbbsbbbsbbbssbbbbbbbbbbo..", "obbbbbbbbbbbbbbbbbebbebebbeo..", "obbbbbbbbbbbbbbbbbbeewwbeebo..", "obbbbbbbbbbbbbbbbbkwwwnwwbko..", ".obbbbbbbssssssbbbbwwwwwwbo...", "..ossssssttttttsswwwwwwwwwo...", "..ottttttttttttttwwwwowwwwwo..", "..owwttttttttttttttttoooooo...", "...oooooottttttoooooo........."], nap = null;
+  var NAP_H = 15, nap = null;   // the sleeping cat on the sign lies 15 art rows tall (its sprite comes from app.js)
   var house = {}, sign = {}, lot = {}, hills = [], shops = [], bgTrees = [], wires = [], tower = null, nbL = null, nbR = null;
-  var furn = [], people = [], scene = [], tent = null, cpoles = [], strands = [], stars = [], clouds = [], birds = [], flies = [];
-  var skyImg = null, gravel = null, path = null, statics = [], openStand = null;
+  var furn = [], people = [], border = [], scene = [], canopy = null, cpoles = [], strands = [], stars = [], clouds = [], birds = [], flies = [];
+  var skyImg = null, gravel = null, path = null, statics = [], openStand = null, menuStand = null;
   var fitK = 1, WH = 10, doorX = 0, walkB = 0, WG = null, WC = 3;
   function overlap(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
   // depth: things near the house are drawn a little smaller than things near the curb (fitK shrinks it all to fit narrow screens)
@@ -71,15 +71,25 @@
   function wcen(id) { return [(id % WG.cols) * WC + 1, Math.floor(id / WG.cols) * WC + 1]; }
   function wcell(x, y) { return clamp(Math.floor(y / WC), 0, WG.rows - 1) * WG.cols + clamp(Math.floor(x / WC), 0, WG.cols - 1); }
   // shared with the cat sprites: the art grid, everything they must keep clear of, and (sent back) where the cats are
-  var API = window.ChibiroScene = { ver: 0, cats: [], holding: {}, pets: [], night: 0, info: function () {
-    return { P: P, W: W, H: H, yardTop: yardTop, rect: cvs.getBoundingClientRect(), ver: API.ver, statics: statics, scale: sc,
+  var API = window.ChibiroScene = { ver: 0, cats: [], holding: {}, pets: [], night: 0, sleepers: {}, info: function () {
+    return { P: P, W: W, H: H, yardTop: yardTop, rect: cvs.getBoundingClientRect(), ver: API.ver, statics: statics, scale: sc, perches: perches(),
+             flowers: border.filter(function (b) { return !b.lamp; }).map(function (b) { return [b.x, b.y]; }),
              walkers: people.filter(function (q) { return q.pose === 'walk'; }).map(function (q) { return wbox(q, q.x); }) };
   } };
+  function perches() { // where a cat may hop up and rest: the top of a table, or an empty chair (never under the big tent)
+    var out = [];
+    furn.forEach(function (f, i) {
+      if (f.kind !== 'set' || (canopy && canopy.f === f)) return;
+      if (!f.who[0] && !f.who[1]) out.push({ id: 't' + i, x: f.x, y: Math.round(f.yb - 16 * f.k), gy: f.yb, table: true });   // only an empty table, so a napping cat never covers a customer
+      for (var sd = 0; sd < 2; sd++) if (!f.who[sd]) out.push({ id: 'c' + i + sd, x: f.x + (sd ? 14 : -14) * f.k, y: Math.round(f.yb - 7 * f.k), gy: f.yb });
+    });
+    return out;
+  }
   function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
-  // the sign is about 10 screen px per letter pixel on every screen, so desktop matches phones
-  function signSize() { var k = clamp(Math.min(Math.floor((W * 0.78 - 8) / 27), Math.floor((H * 0.16 - 6) / 5), Math.round(10 / P)), 2, 6); return { k: k, w: 27 * k + (k + 2) * 2, h: 5 * k + (k + 2) * 2 }; }
+  // the sign is about 13 screen px per letter pixel (Niekki asked for it a bit bigger), as wide as the screen allows on phones
+  function signSize(cap) { var k = clamp(Math.min(Math.floor((W * 0.9 - 8) / 29), Math.floor((H * 0.18 - 6) / 5), Math.round(13 / P), cap || 99), 2, 7); return { k: k, w: 27 * k + (k + 2) * 2, h: 5 * k + (k + 2) * 2 }; }
   // the gravel yard is a V: as wide as the house front at the porch, opening out toward the viewer at the curb
   function edgeL(y) { return Math.round(path.lt + (path.lb - path.lt) * clamp((y - yardTop) / yd, 0, 1)); }
   function edgeR(y) { return Math.round(path.rt + (path.rb - path.rt) * clamp((y - yardTop) / yd, 0, 1)); }
@@ -91,13 +101,17 @@
 
     // the CHIBIRO sign floats on its own, centred in the upper part of the frame
     // a big ginger cat sleeps curled up on top of the CHIBIRO letters, over the left end; the sign moves down to make room
-    var s = signSize(), cs = Math.max(1, Math.round(s.k * 0.4)), lift = NAP.length * cs - (s.k + 2) - cs;
-    var sy = panelB + Math.max(4, Math.round((H - panelB) * 0.05)) + Math.max(0, lift);
+    var s, cs, lift, sy;
+    for (var cap = 99; ; cap = s.k - 1) {   // short screens (phones on their side): shrink the sign until the house fits under it
+      s = signSize(cap); cs = Math.max(1, Math.round(s.k * 0.4)); lift = NAP_H * cs - (s.k + 2) - cs;
+      sy = panelB + Math.max(4, Math.round((H - panelB) * 0.05)) + Math.max(0, lift);
+      if (s.k <= 2 || sy + s.h + 10 + 44 <= yardTop) break;
+    }
     sign = { k: s.k, w: s.w, h: s.h, x: Math.round(W / 2 - s.w / 2), y: sy };
-    nap = { cs: cs, x: sign.x + s.k + 2 + s.k, y: sign.y + (s.k + 2) - NAP.length * cs + cs };
+    nap = { cs: cs, x: sign.x + s.k + 2 + s.k, y: sign.y + (s.k + 2) - NAP_H * cs + cs };
     // the café house stands alone in the middle, below the sign
     var bwMax = W < 300 ? Math.round(W * 0.66) : Math.min(Math.round(W * 0.4), 190);
-    var hh = clamp(yardTop - (sy + s.h) - 10, 50, 150);
+    var hh = clamp(yardTop - (sy + s.h) - 10, 44, 150);
     var bw = clamp(Math.round(hh * 1.3), 80, bwMax);
     hh = Math.min(hh, Math.round(bw / 1.05));
     var spare = yardTop - (sy + s.h) - 10 - hh;                                  // narrow screens: the house is held back by the width,
@@ -136,7 +150,8 @@
     var small = W < 300, phone = P === 2;                                        // phones drop the front row so the yard can be drawn bigger (Niekki)
     doorX = house.x + Math.round(house.w * 0.1) + 5;
     openStand = { x: doorX + 18, yb: yardTop + 4 };                             // on the porch slab, just right of the front door
-    var G, CG, Lu, Ru, rowY = [], topMin = yardTop + 10, aisle = 0;
+    menuStand = { x: doorX - 18, yb: yardTop + 4 };                             // a chalkboard menu just left of the door: a link to the menu (Niekki)
+    var G, CG, Lu, Ru, rowY = [], topMin = yardTop + 10, aisle = 0, TENT_H = 38;
     var baseY = H - 2 - (phone ? Math.round(H * 0.035) : 0);                      // phones: the front row sits a little up from the bottom edge (Niekki)
     function spacing(roomy) {                                                    // walkway half-width, walkway-to-set gap, gap between columns (set units);
       WH = roomy ? 10 : (phone ? 6 : 7); G = roomy ? 6 : (phone ? 2 : 3); CG = roomy ? 18 : (phone ? 3 : 5);   // roomy leaves aisles wide enough to walk through
@@ -148,6 +163,7 @@
       return phone ? [y2, y3] : [y1, y2, y3];
     }
     function blockFits(rows) {
+      if (rows[0] - TENT_H * sc(rows[0]) < yardTop + 5) return false;   // the big tent over the first left set stays clear of the menu stand on the porch
       if (rows[0] - 27 * sc(rows[0]) < topMin) return false;
       var kb = sc(baseY), mg = phone ? 4 : 6; walkB = clamp(Math.round(W / 2 - (Ru - Lu) / 2 * kb), Math.ceil(mg + Lu * kb), Math.floor(W - mg - Ru * kb));
       var m = phone ? 4 : 6; return rows.every(function (y) { var k = sc(y), xw = walkX(y); return xw - Lu * k >= m && xw + Ru * k <= W - m; });   // the corner poles keep the edges
@@ -158,6 +174,24 @@
     var slack = rowY[0] - 27 * sc(rowY[0]) - topMin;                             // spare depth (phones): open up the aisles between rows
     for (var e = minGap() + Math.floor(slack / 2); e > minGap(); e--) { var ry = stack(e); if (blockFits(ry)) { rowY = ry; break; } }
     blockFits(rowY);
+    // a border of small flowers along both edges of the gravel, with a dim garden lamp between every two flowers (Niekki)
+    border = []; var cols = ['#f08aa8', '#ffe07a', '#fdf6e3', '#c9a0e8', '#ff9a6a'];
+    [-1, 1].forEach(function (side) {
+      var acc = 0, n = 0, prev = null;
+      for (var by = yardTop + 8; by < H - 1; by++) {
+        var bx = side < 0 ? edgeL(by) - 3 : edgeR(by) + 2;
+        if (prev) acc += Math.sqrt(1 + (bx - prev) * (bx - prev));
+        prev = bx;
+        var k = sc(by);
+        if (acc < 4 * k) continue;
+        acc = 0;
+        if (bx < 6 || bx > W - 7) { n++; continue; }
+        var ox = bx + side * 3, oy = by - 2;   // a second row of flowers just behind, between the front ones (Niekki: more flowers)
+        if (ox >= 4 && ox <= W - 5 && oy > yardTop + 6) border.push({ x: ox, y: oy, k: sc(oy), lamp: false, col: cols[(n * 2 + 1) % cols.length], col2: cols[(n * 2 + 3) % cols.length] });
+        border.push({ x: bx, y: by, k: k, lamp: n % 2 === 1, col: cols[(n * 3 + (side > 0 ? 2 : 0)) % cols.length], col2: cols[(n * 3 + (side > 0 ? 2 : 0) + 2) % cols.length] });
+        n++;
+      }
+    });
     furn = []; people = [];
     var seatLeft = small ? 4 : 6;
     rowY.forEach(function (ty) {
@@ -174,20 +208,19 @@
     furn.forEach(function (f) { if (extra > 0 && !!f.who[0] !== !!f.who[1]) { var sd = f.who[0] ? 1 : 0; f.who[sd] = person(R2, 'sit'); f.who[sd].ph = R2() * 6.3; extra--; } });
     furn.forEach(function (f) { for (var sd = 0; sd < 2; sd++) if (extra > 0 && !f.who[sd]) { f.who[sd] = person(R2, 'sit'); f.who[sd].ph = R2() * 6.3; extra--; } });
 
-    // the tent and the standing customers go wherever they fit beside the blocks, never on a set
+    // the standing customers go wherever they fit beside the blocks, never on a set
     // a light pole in each bottom corner, each strung to the house
     var cpTop = Math.max(house.wallTop, house.slab - 6);
     cpoles = [{ x: 1, top: cpTop, base: H }, { x: W - 4, top: cpTop, base: H }];
-    statics = [[openStand.x - 15, openStand.yb - 27, openStand.x + 15, openStand.yb + 1]].concat(cpoles.map(function (c) { return [c.x - 1, c.top, c.x + 4, c.base]; }));
+    statics = [[openStand.x - 15, openStand.yb - 27, openStand.x + 15, openStand.yb + 1], [menuStand.x - 12, menuStand.yb - 22, menuStand.x + 12, menuStand.yb + 1]].concat(cpoles.map(function (c) { return [c.x - 1, c.top, c.x + 4, c.base]; }));
     furn.forEach(function (f) { statics.push([f.x - 23 * f.k, f.yb - 26 * f.k, f.x + 23 * f.k, f.yb + 1]); });
     function free(b) { return b[0] >= 1 && b[2] <= W - 1 && !statics.some(function (s) { return overlap(b, s); }); }
     var y1 = rowY[0], k1 = sc(y1), gL = walkX(y1) - Lu * k1, gR = walkX(y1) + Ru * k1;
-    tent = null; var tw = Math.round(Math.max(28, bw * 0.26) * k1), th = Math.round(tw * 0.62);
-    [Math.round(gL - 5 - tw), Math.round(gR + 5)].some(function (tx) {
-      var b = [tx - 1, y1 - th - 1, tx + tw + 1, y1 + 1];
-      if (!free(b)) return false;
-      tent = { x: tx, w: tw, h: th, base: y1 }; statics.push(b); return true;
-    });
+    // a big dome shelter, open on all sides, stands over the left table set nearest the house, so its chairs,
+    // table and customers sit inside it (Niekki)
+    var cf = furn[0];
+    canopy = cf ? { f: cf, hw: Math.max(25, Math.min(29, Math.floor((cf.x - 2) / cf.k))), h: TENT_H } : null;
+    if (canopy) statics.push([cf.x - canopy.hw * cf.k - 1, cf.yb - TENT_H * cf.k, cf.x + canopy.hw * cf.k + 1, cf.yb + 1]);
     function standAt(q, x, yb, tall) {                                          // place a standing customer, if they fit
       var k = sc(yb), b = [x - 6 * k, yb - tall * k, x + 6 * k, yb + 1];
       if (!free(b)) return false;
@@ -233,7 +266,7 @@
       w.x = ce[0]; w.yb = ce[1]; w.face = n ? -1 : 1; w.v = 6 + R() * 4; w.dist = 0; w.cup = n === 1; w.path = []; w.waitUntil = 0; w.blocked = 0;
       people.push(w);
     });
-    scene = [{ yb: openStand.yb, sign: true }].concat(tent ? [{ yb: tent.base, tent: true }] : [])
+    scene = [{ yb: openStand.yb, sign: true }, { yb: menuStand.yb, menu: true }].concat(canopy ? [{ yb: canopy.f.yb - 0.5, canopy: 0 }, { yb: canopy.f.yb + 0.5, canopy: 1 }] : [])
       .concat(furn.map(function (f) { return { yb: f.yb, f: f }; })).concat(people.map(function (q) { return { yb: q.yb, q: q }; }));
     API.ver++;
 
@@ -257,7 +290,7 @@
     for (i = 0; i < nS; i++) {
       var st = { x: Math.floor(R() * W), y: Math.floor(skyTop + R() * (sBot - skyTop)), b: R() < 0.06, ph: R() * 6.3 };
       if (st.x > sign.x - 3 && st.x < sign.x + sign.w + 3 && st.y > sign.y - 3 && st.y < sign.y + sign.h + 3) continue;   // not behind the sign
-      if (nap && st.x > nap.x - 3 && st.x < nap.x + 40 * nap.cs && st.y > nap.y - 14 * nap.cs && st.y < nap.y + NAP.length * nap.cs + 3) continue;   // or the sleeping cat and its Zzz
+      if (nap && st.x > nap.x - 3 && st.x < nap.x + 40 * nap.cs && st.y > nap.y - 14 * nap.cs && st.y < nap.y + NAP_H * nap.cs + 3) continue;   // or the sleeping cat and its Zzz
       stars.push(st);
     }
     clouds = []; var nC = Math.max(3, Math.round(W / 70));
@@ -278,6 +311,7 @@
     panelB = copy ? clamp(Math.round((copy.getBoundingClientRect().bottom - top) / P) + 3, 0, Math.round(H * 0.7)) : 0;
     skyTop = cw < 768 ? panelB : 0;
     layout();
+    placeMenuLink();
     draw(performance.now());
   }
 
@@ -330,7 +364,7 @@
   function key4(K, f) { var u = Math.floor(f), a = f - u, A = K[u], B = K[u + 1]; return [A[0] + (B[0] - A[0]) * a, A[1] + (B[1] - A[1]) * a, A[2] + (B[2] - A[2]) * a]; }
   var SUN = [[0.88, 0.8, 9], [0.95, 1.35, 9], [0.88, 0.8, 9]];   // y is a share of sky-top → horizon, so the sunset sun sits low
   var MOON = [[0.1, 1.9, 5], [0.9, 0.6, 5], [0.96, 1.9, 5]];
-  var GLYPH = { C: [7, 4, 4, 4, 7], H: [5, 5, 7, 5, 5], I: [7, 2, 2, 2, 7], B: [6, 5, 6, 5, 6], R: [6, 5, 6, 5, 5], O: [7, 5, 5, 5, 7], P: [6, 5, 6, 4, 4], E: [7, 4, 6, 4, 7], N: [6, 5, 5, 5, 5], Z: [7, 1, 2, 4, 7], L: [4, 4, 4, 4, 7], S: [7, 4, 7, 1, 7], D: [6, 5, 5, 5, 6] };
+  var GLYPH = { C: [7, 4, 4, 4, 7], H: [5, 5, 7, 5, 5], I: [7, 2, 2, 2, 7], B: [6, 5, 6, 5, 6], R: [6, 5, 6, 5, 5], O: [7, 5, 5, 5, 7], P: [6, 5, 6, 4, 4], E: [7, 4, 6, 4, 7], N: [6, 5, 5, 5, 5], Z: [7, 1, 2, 4, 7], L: [4, 4, 4, 4, 7], S: [7, 4, 7, 1, 7], D: [6, 5, 5, 5, 6], M: [5, 7, 7, 5, 5], U: [5, 5, 5, 5, 7] };
   function text(s, x, y, c, k) {
     k = k || 1; ctx.fillStyle = c;
     for (var i = 0; i < s.length; i++) { var g = GLYPH[s[i]]; for (var r = 0; r < 5; r++) for (var b = 0; b < 3; b++) if (g[r] >> (2 - b) & 1) ctx.fillRect(x + (i * 4 + b) * k, y + r * k, k, k); }
@@ -436,6 +470,8 @@
     rect(sx - 3, base - 8, 4, 7, T('#a02a24')); rect(sx + sw - 1, base - 8, 3, 7, T('#a02a24'));
     for (var c = sx + 7; c < sx + sw - 2; c += 8) rect(c, base - 6, 1, 4, T('#8a2420'));
     rect(sx + 3, base - 9, 4, 3, T('#7a2420'));                                                         // cushion
+    // a small dark grey cat asleep on the sofa, curled up with its tail round it, gently breathing (Niekki)
+    API.sleepers.sofa = { x: sx + sw - 9, y: base - 5 };                                                // drawn by the cat sprites (app.js)
     rect(sx - 12, base - 5, 8, 1, T('#2e2a28')); rect(sx - 11, base - 4, 1, 4, T('#2e2a28')); rect(sx - 6, base - 4, 1, 4, T('#2e2a28'));
     rect(sx - 10, base - 7, 2, 2, T('#fdf6e3'));
     [dx - 6, dx + dw + 2].forEach(function (px) { rect(px, base - 5, 4, 5, T('#c0583e')); rect(px - 1, base - 9, 6, 4, T('#4f8a2a')); rect(px + 1, base - 11, 2, 2, T('#5a9a2e')); });
@@ -474,16 +510,9 @@
 
   function drawNap(t, p) { // the sleeping cat: breathes slowly, with little Zs drifting up from its head
     if (!nap) return;
-    var cs = nap.cs, bob = reduce ? 0 : Math.round(Math.sin(t * 0.0012)), x0 = nap.x, y0 = nap.y + bob, breath = !reduce && Math.sin(t * 0.0018) > 0.2 ? 1 : 0;
-    var L = function (h) { return css(lerpC(rgb(h), P_.c.tint, P_.tintA * 0.45)); }, C = { o: OUT, e: OUT, b: L('#e8a060'), s: L('#c67a3a'), t: L('#d88a48'), w: L('#fff3e0'), p: L('#f2a0a0'), n: L('#d06a6a'), k: L('#f2b0a0') };   // lit softly, like the sign
-    for (var r = 0; r < NAP.length; r++) for (var c = 0; c < NAP[r].length; c++) { var ch = NAP[r][c]; if (ch !== '.') { ctx.fillStyle = C[ch]; ctx.fillRect(x0 + c * cs, y0 + r * cs, cs, cs); } }
-    if (breath) for (c = 1; c < 16; c++) {                                                // on each breath the back swells: its outline rises a touch and fur fills in below, so nothing splits apart
-      for (r = 0; r < NAP.length && NAP[r][c] === '.'; r++);
-      if (r >= NAP.length - 1 || NAP[r][c] !== 'o') continue;
-      var d = Math.max(1, cs >> 1), below = NAP[r + 1][c];
-      ctx.fillStyle = C[below === '.' ? 'o' : below]; ctx.fillRect(x0 + c * cs, y0 + r * cs, cs, cs);
-      ctx.fillStyle = C.o; ctx.fillRect(x0 + c * cs, y0 + r * cs - d, cs, cs);
-    }
+    var cs = nap.cs, bob = reduce ? 0 : Math.round(Math.sin(t * 0.0012)), x0 = nap.x, y0 = nap.y + bob;
+    // the cat itself is drawn by the cat sprites (app.js), in the same pixel art as the cats in the yard; this tells it where to lie
+    API.sleepers.nap = { x: x0 + 15 * cs, y: y0 + NAP_H * cs, w: 30 * cs };
     if (reduce) return;
     for (var i = 0; i < 3; i++) {                                                         // three Zs rise and fade in turn
       var ph = ((t / 2400) + i / 3) % 1, zk = Math.max(1, Math.round(cs * (0.5 + ph * 0.6)));
@@ -501,7 +530,7 @@
     for (var x = 0; x < W; x += 2) rect(x, yardTop + ((x * 13) % Math.max(1, yd - 1)), 1, 1, T('#6f8e3a'));
     // the gravel path: a V that opens from the porch toward the curb, tinted for the time of day
     // and warmed by the fairy lights after dark
-    var tint = p.tintA > 0.01 ? css(p.c.tint, p.tintA.toFixed(2)) : null, warm = p.glow > 0.05 ? 'rgba(255,190,110,' + (0.16 * p.glow).toFixed(2) + ')' : null, edge = T('#8a8272');
+    var tint = p.tintA > 0.01 ? css(p.c.tint, p.tintA.toFixed(2)) : null, warm = p.glow > 0.05 ? 'rgba(255,190,110,' + (0.14 * p.glow).toFixed(2) + ')' : null, edge = T('#8a8272');
     var slab = T('#d6ccb6'), joint = T('#ab9f88'), course = 0, nextJ = yardTop + 3;
     for (var y = yardTop; y < H; y++) {
       var l = Math.max(0, edgeL(y)), r = Math.min(W, edgeR(y)), w = r - l;
@@ -519,6 +548,25 @@
     }
   }
 
+  function drawBorder(p) { // small flower clumps on short stems, and between them little stake lamps with a dim warm glow
+    var on = p.glow > 0.1, lift = on ? p.glow * 0.45 : 0;   // the lamps catch the flowers next to them after dark
+    function fc(hex) { return lift ? css(lerpC(lerpC(rgb(hex), P_.c.tint, P_.tintA), rgb(hex), lift)) : T(hex); }
+    if (on) border.forEach(function (b) { if (b.lamp) softGlow(b.x + 0.5, b.y - Math.round(3 * b.k) - 0.5, 4 * b.k + 3, 0.2 * p.glow); });
+    border.forEach(function (b) {
+      var x = b.x, y = b.y, big = b.k > 1.15;
+      if (b.lamp) {
+        var hgt = Math.round(3 * b.k) + 1;
+        rect(x, y - hgt, 1, hgt, T('#3a3430'));
+        rect(x - (big ? 1 : 0), y - hgt - 1, big ? 3 : 1, 1, on ? 'rgba(255,214,140,' + (0.5 + 0.35 * p.glow).toFixed(2) + ')' : T('#8a8272'));
+      } else {
+        var st = Math.max(1, Math.round(2 * b.k)), c = fc(b.col), c2 = fc(b.col2), leaf = fc('#5a8a2e');
+        rect(x, y - st, 1, st, fc('#4f7a2a')); rect(x - 1, y - 1, 1, 1, leaf); rect(x + 1, y - 1, 1, 1, leaf);
+        if (big) { rect(x - 1, y - st - 1, 3, 1, c); rect(x, y - st - 2, 1, 3, c); rect(x, y - st - 1, 1, 1, fc('#e8b040')); rect(x + 2, y - 2, 1, 1, c2); rect(x - 2, y - 2, 1, 1, c2); }
+        else { rect(x, y - st - 1, 1, 1, c); rect(x + 1, y - st, 1, 1, c2); rect(x - 1, y - st + 1 > y - 1 ? y - 1 : y - st + 1, 1, 1, c2); }
+      }
+    });
+  }
+
   function drawFences(p) {
     // low boundary fences behind the grass: a white gate on the left, blue corrugated on the right
     var gl = lot.l - 4, gy = yardTop + 1;
@@ -529,21 +577,6 @@
     }
     var fl = lot.r + 4, fy = yardTop - 10;
     if (fl < W - 2) { corrugated(fl, fy, W - fl, 11, '#8fb0cc', '#6f94b8'); rect(fl, fy, W - fl, 1, T('#5a7a98')); }
-  }
-
-  function drawTent(p) {
-    var t = tent, cx = t.x + t.w / 2, rx = t.w / 2, ry = t.h;
-    for (var y = 0; y < ry; y++) {
-      var hw = Math.round(rx * Math.sqrt(1 - Math.pow((ry - y) / ry, 2)));
-      rect(Math.round(cx - hw), t.base - ry + y, hw * 2, 1, T(y < 2 ? '#d8c09a' : '#c8aa80'));
-    }
-    var aw = Math.round(t.w * 0.26), ah = Math.round(ry * 0.72);                                    // two arched openings
-    [cx - aw - 2, cx + 2].forEach(function (ax) {
-      for (var y = 0; y < ah; y++) { var hw = Math.round((aw / 2) * Math.sqrt(1 - Math.pow((ah - y) / ah, 2))); rect(Math.round(ax + aw / 2 - hw), t.base - ah + y, hw * 2, 1, T('#5a4c3c')); }
-      if (p.glow > 0.2) rect(Math.round(ax + aw / 2 - 1), t.base - Math.round(ah * 0.5), 2, 2, lit(p.glow));
-    });
-    rect(Math.round(cx), t.base - ry, 1, ry, T('#a88a64')); rect(t.x, t.base - 1, t.w, 1, T('#8a7050'));
-    rect(t.x - 1, t.base - 3, 1, 3, T('#6a5a48')); rect(t.x + t.w, t.base - 3, 1, 3, T('#6a5a48'));
   }
 
   function drawChair(x, yb, face, p) { // folding camping chair, side view: X legs, sagging sling seat, armrest with cup holder, reclined back
@@ -566,6 +599,39 @@
       rect(x - 7 + d, yb - 9 + k, 1, 1, T('#7a7e84')); rect(x - 2 - d, yb - 9 + k, 1, 1, T('#7a7e84'));
       rect(x + 3 + d, yb - 9 + k, 1, 1, T('#7a7e84')); rect(x + 8 - d, yb - 9 + k, 1, 1, T('#7a7e84'));
     }
+  }
+  function drawBigTent(front, p) { // a big dome shelter like Niekki's photo: beige canopy, dark brown arched edges, open on all four sides
+    var f = canopy.f, k = f.k, R = Math.round(canopy.hw * k), h = Math.round(canopy.h * k), cx = f.x, base = f.yb + 1;
+    var th = Math.max(1, Math.round(1.6 * k)), A = h - Math.max(5, Math.round(7 * k));                // front arch height
+    var sheet = T('#d6cab0'), sheetL = T('#e4dac4'), sheetD = T('#b8ab90'), edge = T('#4a3a2c'), olive = T('#8a8462'), under = T('#a8987c');
+    function sup(y, Rx, H, n) { var u = Math.max(0, Math.min(1, y / H)); return Math.round(Rx * Math.pow(1 - Math.pow(u, n), 1 / n)); }   // boxy dome profile
+    var aR = Math.round(R * 0.86);
+    if (!front) {   // inside, seen through the front opening: the shaded ceiling, the olive back panels and the back arch (open)
+      var bR = Math.round(R * 0.72), bA = Math.round(A * 0.62), bBase = base - Math.round(3 * k), ceil = base - A + Math.round(A * 0.28);
+      for (var y = base - A; y < base; y++) {
+        var hw = sup(base - y, aR, A, 4);
+        if (y < ceil) { rect(cx - hw, y, hw * 2, 1, under); continue; }
+        var bw = y <= bBase ? sup(bBase - y, bR, bA, 3) : 0;
+        if (y <= bBase && bw < hw) { rect(cx - hw, y, hw - bw, 1, olive); rect(cx + bw, y, hw - bw, 1, olive); }
+        if (bw > 0) { rect(cx - bw - 1, y, 1, 1, edge); rect(cx + bw, y, 1, 1, edge); }
+        if (y > bBase) { rect(cx - hw, y, 1, 1, edge); rect(cx + hw - 1, y, 1, 1, edge); }   // the side openings' edges, down to the ground
+      }
+      rect(cx - Math.round(bR * 0.3), bBase - bA, Math.round(bR * 0.6), 1, edge);
+      if (p.glow > 0.1) softGlow(cx, base - A * 0.55, R * 0.8, 0.28 * p.glow);
+      return;
+    }
+    for (y = base - h; y < base; y++) {   // the canopy around the front opening, with dark trim on every edge
+      var o = sup(base - y, R, h, 3), a = y >= base - A ? sup(base - y, aR, A, 4) : -1, row = y - (base - h);
+      var c = row < 2 ? sheetL : (row < h - A ? sheet : sheetD);
+      if (a < 0) rect(cx - o, y, o * 2, 1, c);
+      else { rect(cx - o, y, o - a - th, 1, c); rect(cx + a + th, y, o - a - th, 1, c); rect(cx - a - th, y, th, 1, edge); rect(cx + a, y, th, 1, edge); }
+      rect(cx - o, y, 1, 1, edge); rect(cx + o - 1, y, 1, 1, edge);
+    }
+    rect(cx - sup(h - 1, R, h, 3), base - h, sup(h - 1, R, h, 3) * 2, 1, edge);
+    var topA = base - A - th; rect(cx - sup(A, aR, A, 4) - th, topA, (sup(A, aR, A, 4) + th) * 2, th, edge);   // top of the front arch
+    for (var r = 0; r < h - A - 2; r++) { var sx = Math.round((r + 1) * R * 0.18); rect(cx - sx, base - h + 1 + r, 1, 1, sheetD); rect(cx + sx, base - h + 1 + r, 1, 1, sheetD); }   // roof seams
+    rect(cx - R - 1, base - 1, 3, 1, edge); rect(cx + R - 2, base - 1, 3, 1, edge);                     // feet
+    if (p.glow > 0.2) rect(cx - 1, topA + th, 3, 2, lit(p.glow));                                       // a little lamp hanging inside
   }
   function drawFurniture(f, p, t) {
     SC_ = { ax: f.x, ay: f.yb, k: f.k };
@@ -760,6 +826,31 @@
     rect(nX + 13, nY - 2, 1, 2, T('#2a2624'));                                                                    // power cord to the house
   }
 
+  function drawMenuStand(p) { // an A-frame chalkboard: dark board in a wooden frame with MENU chalked on it
+    var mx = menuStand.x, yb = menuStand.yb, bw = 19, bh = 14, bx = mx - 9, by = yb - 21, wood = T('#8a5a3a'), woodD = T('#5e3a24');
+    rect(bx + 1, by + bh, 1, yb - by - bh, woodD); rect(bx + bw - 2, by + bh, 1, yb - by - bh, woodD);                // legs
+    rect(bx, yb - 1, 3, 1, woodD); rect(bx + bw - 3, yb - 1, 3, 1, woodD);
+    rect(bx - 1, by - 1, bw + 2, bh + 2, wood); rect(bx - 1, by + bh, bw + 2, 1, woodD); rect(mx - 1, by - 2, 3, 1, woodD);   // frame and hinge
+    rect(bx, by, bw, bh, T('#26332c'));
+    var chalk = T('#f4efe0'), dim = T('#9aa69a');
+    text('MENU', bx + 2, by + 2, chalk, 1);
+    rect(bx + 3, by + 9, 9, 1, dim); rect(bx + 14, by + 9, 2, 1, T('#e0b060'));
+    rect(bx + 3, by + 11, 7, 1, dim); rect(bx + 14, by + 11, 2, 1, T('#e0b060'));
+    if (p.glow > 0.1) softGlow(mx, by + bh / 2, 14, p.glow * 0.12);
+  }
+  function placeMenuLink() { // the clickable area over the chalkboard, in page pixels
+    var a = document.getElementById('menu-stand'); if (!a || !menuStand) return;
+    a.hidden = false;
+    a.style.left = (menuStand.x - 12) * P + 'px'; a.style.top = (menuStand.yb - 24) * P + 'px';
+    a.style.width = 24 * P + 'px'; a.style.height = 25 * P + 'px';
+    var tap = a.querySelector('.hero__tap');
+    if (tap && !tap.firstChild) {   // a little pixel hand, pointing up
+      var M = ['...oo.....', '..owwo....', '..owwo....', '..owwooo..', '..owwowwoo', '.oowwwwwwo', 'owowwwwwwo', 'owwwwwwwwo', '.owwwwwwo.', '..owwwwo..', '..oooooo..'], r = '';
+      M.forEach(function (row, y) { for (var x = 0; x < row.length; x++) if (row[x] !== '.') r += '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + (row[x] === 'o' ? '#2c1a12' : '#fdf6e3') + '"/>'; });
+      tap.innerHTML = '<svg width="20" height="22" viewBox="0 0 10 11" shape-rendering="crispEdges">' + r + '</svg>';
+    }
+  }
+
   function drawCornerPoles(p) { // taller, thicker poles up front: wood post, a cap and a bracket for the strand
     cpoles.forEach(function (c) {
       rect(c.x, c.top, 3, c.base - c.top, T('#7a5a40')); rect(c.x + 2, c.top, 1, c.base - c.top, T('#5a4030')); rect(c.x, c.top, 1, c.base - c.top, T('#9a7656'));
@@ -773,7 +864,7 @@
       sag(s[0], s[1], s[2], s[3], s[4], function (x, y, i) {
         if (i % 4 === 0) {
           var tw = reduce ? 1 : 0.75 + 0.25 * Math.sin(t * 0.005 + i * 1.3 + si);
-          if (on) { if (p.glow > 0.3 && i % 8 === 0) softGlow(x + 0.5, y + 0.5, 9, 0.42 * p.glow * tw); rect(x, y, 1, 1, 'rgba(255,236,176,' + (0.35 + 0.65 * p.glow * tw).toFixed(2) + ')'); }
+          if (on) { if (p.glow > 0.3 && i % 8 === 0) softGlow(x + 0.5, y + 0.5, 7, 0.26 * p.glow * tw); rect(x, y, 1, 1, 'rgba(255,236,176,' + (0.35 + 0.55 * p.glow * tw).toFixed(2) + ')'); }
           else rect(x, y, 1, 1, 'rgba(250,246,232,0.55)');
         } else if (i % 2 === 0) rect(x, y, 1, 1, wire);
       });
@@ -833,12 +924,14 @@
     var haze = css(lerpC(p.c.skyLow, p.c.skyMid, 0.4), 0.42);
     drawTwoStorey(nbL, p, -1, haze); drawTwoStorey(nbR, p, 1, haze);
     drawGrounds(p);
+    drawBorder(p);
     drawFences(p);
     drawHouse(t, p);
-    lamps = scene.filter(function (it) { return it.f && it.f.kind === 'set' && (it.f.who[0] || it.f.who[1]); }).map(function (it) { var f = it.f; return { x: f.x + 2 * f.k, y: f.yb - 13 * f.k, r: 34 * f.k }; });
-    if (p.glow > 0.1) lamps.forEach(function (l) { softGlow(l.x, l.y, l.r, 0.6 * p.glow); });   // lantern light on the ground, under every set so it never washes over nearer ones
+    if (p.glow > 0.1) softGlow(W / 2, yardTop + yd * 0.25, Math.max(house.w, W * 0.45), 0.09 * p.glow);   // the string lights wash the yard in warm light (Niekki: night was too dark)
+    lamps = scene.filter(function (it) { return it.f && it.f.kind === 'set' && (it.f.who[0] || it.f.who[1]); }).map(function (it) { var f = it.f; return { x: f.x + 2 * f.k, y: f.yb - 13 * f.k, r: 40 * f.k }; });
+    if (p.glow > 0.1) lamps.forEach(function (l) { softGlow(l.x, l.y, l.r, 0.55 * p.glow); });   // lantern light on the ground, under every set so it never washes over nearer ones
     scene.sort(function (m, n) { return (m.q ? m.q.yb : m.yb) - (n.q ? n.q.yb : n.yb); });   // walkers move in depth, so re-sort each frame
-    scene.forEach(function (it) { if (it.sign) drawOpenStand(t, p); else if (it.tent) drawTent(p); else if (it.f) drawFurniture(it.f, p, t); else drawStander(it.q, t, dt); });
+    scene.forEach(function (it) { if (it.sign) drawOpenStand(t, p); else if (it.menu) drawMenuStand(p); else if (it.canopy != null) drawBigTent(it.canopy, p); else if (it.f) drawFurniture(it.f, p, t); else drawStander(it.q, t, dt); });
     drawCornerPoles(p);
     drawStrands(reduce ? 0 : t, p);
     drawSign(reduce ? 0 : t, p);

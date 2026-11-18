@@ -32,6 +32,8 @@
 <body class="cb">
   <nav class="cb-nav" aria-label="Main">
     <a class="cb-nav__brand" href="#top" data-go="top"><img src="assets/chibiro-wordmark.svg" alt="Chibiro Coffee" width="84" height="43"></a>
+    <button class="cb-nav__menu" id="navMenu" aria-expanded="false" aria-controls="navPanel" aria-label="Menu"><span class="cb-nav__bars" aria-hidden="true"></span></button>
+    <div class="cb-nav__panel" id="navPanel">
     <ul class="cb-nav__links">
       <li><a href="#stamps" data-go="stamps">Stamp<span class="cb-nav__wide"> Card</span><span class="cb-nav__narrow">s</span></a></li>
       <li><a href="#photos" data-go="photos">Photos</a></li>
@@ -41,6 +43,7 @@
     <div class="cb-nav__tools">
       <button class="cb-toggle" id="soundToggle" role="switch" aria-checked="false"><span>Sound FX</span><span class="cb-toggle__track"></span><span class="cb-toggle__state">Off</span></button>
       <button class="cb-toggle" id="catToggle" role="switch" aria-checked="true"><span>Cat Mode</span><span class="cb-toggle__track"></span><span class="cb-toggle__state">Playful</span></button>
+    </div>
     </div>
   </nav>
 
@@ -52,12 +55,9 @@
         <span class="cb-sr-only">Taman Jaya · Likas · Kota Kinabalu</span>
         <h1 class="cb-sr-only">Home-Brewed Specialty Coffee in Likas — Cat-Approved</h1>
         <p class="cb-sr-only">A cozy late-afternoon-to-midnight hangout with free Wi-Fi, free parking, and seats indoors and out. Open Tuesday to Sunday, 3:08 PM – 12:08 AM.</p>
-        <div class="hero__cta">
-          <a class="cb-btn cb-btn--lg" href="#brews" data-go="brews">Explore Menu</a>
-          <a class="cb-btn cb-btn--lg cb-btn--plain" href="https://www.google.com/maps/search/?api=1&query=Chibiro+Coffee+Taman+Jaya+Likas+Kota+Kinabalu" target="_blank" rel="noopener">Find Us</a>
-        </div>
       </div>
     </div>
+    <a class="hero__menu-stand" id="menu-stand" href="#brews" data-go="brews" aria-label="See our menu" hidden><span class="hero__tap" aria-hidden="true"></span></a>
     <div class="hero__stage" id="stage" aria-hidden="true"></div>
   </header>
 
