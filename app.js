@@ -1,5 +1,11 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
+  // Motion: the visitor's reduce-motion setting, and Cat Mode (Playful, or Sleepy, which holds every scene still)
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var playful = !reduce;
+  function still() { return reduce || !playful; }
+  var onMotion = [];                                        // each animation adds a function here that wakes it when Cat Mode changes
+  document.body.classList.toggle('cb--still', still());     // CSS pauses its looping animations (the tap hint, the live dot) too
   var view = {   // the page itself scrolls
     scrollTo: function (o) { window.scrollTo(o); }
   };
@@ -49,6 +55,13 @@
       it.style.gridRow = swipe ? String(Math.floor(j / 2) + 1) : '';
       it.style.gridColumn = swipe ? String(pg * 2 + j % 2 + 1) : '';
     });
+    // a last page holding a single card would only fill one of its two columns, and the swipe row could not line it up:
+    // an empty spacer fills the other column
+    [].forEach.call(menuEl.querySelectorAll('.menu-spacer'), function (sp) { sp.remove(); });
+    if (swipe && pages > 1 && list.length % n === 1) {
+      var sp = document.createElement('div'); sp.className = 'menu-spacer'; sp.setAttribute('aria-hidden', 'true');
+      sp.style.gridRow = '1'; sp.style.gridColumn = String(pages * 2); grid.appendChild(sp);
+    }
     if (swipe) { var to = list[page * n]; if (to) { var target = to.offsetLeft - list[0].offsetLeft; if (Math.abs(grid.scrollLeft - target) > 2) grid.scrollTo({ left: target, behavior: menuSmooth ? 'smooth' : 'auto' }); } menuSmooth = false; }
     renderPager(pages);
   }
@@ -137,13 +150,17 @@
     });
     function arrows() { var m = track.scrollWidth - track.clientWidth - 2; document.querySelector('.photo-line__btn--prev').disabled = track.scrollLeft <= 2; document.querySelector('.photo-line__btn--next').disabled = track.scrollLeft >= m; }
     track.addEventListener('scroll', arrows, { passive: true }); window.addEventListener('resize', arrows); arrows();
-    // each photo swings a little from its peg; scrolling sideways shoves them, and they swing harder before settling back
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // each photo swings a little from its peg; scrolling sideways shoves them, and they swing harder before settling back.
+    // Reduce motion or Cat Mode Sleepy: the photos hang straight and the loop stops.
+    if (reduce) return;
     var sw = [].map.call(list.children, function (li, i) { return { el: li, a: 0, v: 0, ph: i * 1.7, last: '' }; });
     var lastX = track.scrollLeft, lastT = 0, kick = 0, onScreen = false, looping = false;
     track.addEventListener('scroll', function () { var dx = track.scrollLeft - lastX; lastX = track.scrollLeft; kick += dx; start(); }, { passive: true });
-    function start() { if (!looping && onScreen) { looping = true; lastT = performance.now(); requestAnimationFrame(swing); } }
+    function start() { if (!looping && onScreen && !still()) { looping = true; lastT = performance.now(); requestAnimationFrame(swing); } }
+    function settle() { sw.forEach(function (p) { p.a = 0; p.v = 0; if (p.last !== 'rotate(0deg)') { p.el.style.transform = 'rotate(0deg)'; p.last = 'rotate(0deg)'; } }); kick = 0; }
+    onMotion.push(function () { if (still()) settle(); else start(); });
     function swing(t) {
+      if (still()) { settle(); looping = false; return; }
       var dt = Math.min(50, t - lastT) / 1000; lastT = t;
       var push = Math.max(-60, Math.min(60, kick)); kick = 0;
       sw.forEach(function (p) {
@@ -161,9 +178,6 @@
   })();
 
   /* ---------- Smooth-scroll links ---------- */
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var playful = !reduce;                                  // Cat Mode: Playful, or Sleepy (which holds every scene still)
-  function still() { return reduce || !playful; }
   document.addEventListener('click', function (e) {
     var a = e.target.closest('[data-go]');
     if (a) {
@@ -462,13 +476,15 @@
      QR code. Staff scan it with the café phone, which opens the staff page of the Google Apps Script (signed
      in to the Chibiro Google account) to add a stamp or give the free drink. This page polls the sheet so new
      stamps appear live. Backend and setup: apps-script/Code.gs and the setup guide.
-     Paste the two web app links (both end in /exec) here. While STAMP_API is empty the card runs in a
+     The two web app links (both end in /exec) go in config.js. While its api link is empty the card runs in a
      preview mode that only lives in this browser, so the design can be tried out. */
-  var STAMP_API = 'https://script.google.com/macros/s/AKfycbwR8Z7vlQEVyXehefGOcjkERVbE7l9H5FrJ0IwzMyVmkzl7V-aPuUicSdaz9dba1ZXx/exec';     // public deployment ("Who has access: Anyone"): looks up a card's stamps
-  var STAMP_STAFF = 'https://script.google.com/macros/s/AKfycbzCwCftbNpsDwIqmo1EqXWAJ1WeKWnyd1YudxPhTHwZ08Os7h2pCUfgBEONVk77mDHw/exec';   // staff deployment ("Who has access: Only myself"): the staff page. Also in staff.js: keep the two the same.
+  var LINKS = window.CHIBIRO_LINKS || {};   // config.js: the Apps Script links, shared with the staff scanner
+  var STAMP_API = LINKS.api || '';           // public deployment ("Who has access: Anyone"): looks up a card's stamps
+  var STAMP_STAFF = LINKS.staff || '';       // staff deployment ("Who has access: Only myself"): the staff page
   (function () {
     var cardEl = document.getElementById('stampCard'), side = document.getElementById('stampSide'); if (!cardEl || !side) return;
     var SIZE = 10, CARD_KEY = 'chibiro-card', PREV_KEY = 'chibiro-card-previous', STAFF_KEY = 'chibiro-staff-phone', DEMO_KEY = 'chibiro-card-demo', TZ = 'Asia/Kuching';
+    var GONE_KEY = 'chibiro-deleted-cards', MEMBER_KEY = 'chibiro-card-member';   // cards deleted on this phone; the card's last known member number
     var CATNAMES = ['Calico', 'Orange Tabby', 'Siamese', 'Tuxedo', 'Scottish Fold', 'Black Cat', 'Tortoiseshell', 'Grey Tabby', 'Snow', 'Ginger & White'];
     var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var demo = !STAMP_API;
@@ -476,11 +492,18 @@
     function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
     function validCode(c) { return typeof c === 'string' && /^[A-Za-z0-9_-]{22}$/.test(c); }
     function esc(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-    function pad(n) { return ('000' + n).slice(-4); }
+    function pad(n) { n = Number(n) || 0; return n < 10000 ? ('000' + n).slice(-4) : String(n); }   // 0001 … 9999, then 10000 in full
     function newCode() { var b = new Uint8Array(16); crypto.getRandomValues(b); return btoa(String.fromCharCode.apply(null, b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
     function cardLink(code) { return location.origin + location.pathname + '#card=' + code; }
     function short(iso) { var p = String(iso).split('-'); return p.length === 3 ? p[2] + ' ' + MON[+p[1] - 1] : ''; }
     function longDate(iso) { try { return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ }).format(new Date(iso)); } catch (e) { return String(iso).slice(0, 10); } }
+    // a card deleted on this phone never comes back from an old link, Home Screen icon or card picture
+    function goneList() { try { var a = JSON.parse(load(GONE_KEY) || '[]'); return Array.isArray(a) ? a.filter(validCode) : []; } catch (e) { return []; } }
+    function isGone(code) { return goneList().indexOf(code) >= 0; }
+    function markGone(code) { var a = goneList().filter(function (c) { return c !== code; }); a.push(code); store(GONE_KEY, JSON.stringify(a.slice(-20))); }
+    function unGone(code) { if (isGone(code)) store(GONE_KEY, JSON.stringify(goneList().filter(function (c) { return c !== code; }))); }
+    // the member number is remembered, so a card picture saved before the card has loaded still shows it
+    function knownMember(code) { try { var m = JSON.parse(load(MEMBER_KEY) || 'null'); return m && m.code === code ? Math.floor(Number(m.member)) || 0 : 0; } catch (e) { return 0; } }
     function todayIso() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
 
     // ---- arriving from a scanned QR code (#card=…) or the café phone set-up link (#staff-phone=on|off) ----
@@ -488,7 +511,7 @@
     var scanned = hash.get('card'), staffSetting = hash.get('staff-phone'), homeStep = hash.get('home') === '1';   // only #card=: the part after # never leaves the phone
     if (validCode(scanned) && STAMP_STAFF && load(STAFF_KEY) === '1') { location.replace(STAMP_STAFF + '?card=' + encodeURIComponent(scanned)); return; }
 
-    var state = { code: load(CARD_KEY), card: null, msg: null, fresh: [], error: false, paused: false, homeHint: false };
+    var state = { code: load(CARD_KEY), card: null, deleted: null, msg: null, fresh: [], error: false, paused: false, homeHint: false };
     if (!validCode(state.code)) state.code = null;
 
     // ---- talking to the sheet (or the in-browser preview) ----
@@ -496,22 +519,31 @@
       var d = null; try { d = JSON.parse(load(DEMO_KEY) || 'null'); } catch (e) { d = null; }
       d = d || { member: 0, stamps: 0, dates: [], freeDrinks: 0 };
       var last = d.dates[d.dates.length - 1], exp = null;
-      if (d.stamps > 0 && d.stamps < SIZE && last) { var x = new Date(last + 'T23:59:59+08:00'); x.setMonth(x.getMonth() + 1); exp = x.toISOString(); }
+      if (d.stamps > 0 && d.stamps < SIZE && last) {        // one month on, at 11:59:59 PM Kota Kinabalu time (31 Jan -> 28 Feb)
+        var q = String(last).split('-'), y = +q[0], mo = +q[1], dd = +q[2], end = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
+        exp = new Date(Date.UTC(y, mo, Math.min(dd, end), 15, 59, 59)).toISOString();
+      }
       return { member: d.member, stamps: d.stamps, size: SIZE, dates: d.dates, expires: exp, stampedToday: false, freeDrinks: d.freeDrinks };
     }
     function demoStamp() {
       var c = demoCard();
-      if (c.stamps >= SIZE) { c.stamps = 0; c.dates = []; c.freeDrinks += 1; state.msg = { text: 'Free drink given (preview). A new card has started.', ok: true }; }
+      if (c.stamps >= SIZE) { c.stamps = 0; c.dates = []; c.freeDrinks += 1; }   // apply() writes the message
       else { if (!c.member) c.member = 308; c.stamps += 1; c.dates = c.dates.concat([todayIso()]); }
       store(DEMO_KEY, JSON.stringify({ member: c.member, stamps: c.stamps, dates: c.dates, freeDrinks: c.freeDrinks }));
       return demoCard();
     }
+    // A plain-text POST keeps this a "simple" request, which Apps Script web apps accept from any site
+    function lookup(code) {
+      return fetch(STAMP_API, { method: 'POST', body: JSON.stringify({ action: 'card', card: code }), redirect: 'follow' })
+        .then(function (r) { return r.json(); }).catch(function () { return null; });
+    }
     function fetchCard() {
       if (!state.code) return Promise.resolve(null);
       if (demo) return Promise.resolve(demoCard());
-      // A plain-text POST keeps this a "simple" request, which Apps Script web apps accept from any site
-      return fetch(STAMP_API, { method: 'POST', body: JSON.stringify({ action: 'card', card: state.code }), redirect: 'follow' })
-        .then(function (r) { return r.json(); }).then(function (r) { return r && r.ok ? norm(r.card) : null; }).catch(function () { return null; });
+      return lookup(state.code).then(function (r) {
+        if (r && r.ok && r.deleted) return { deleted: true, until: typeof r.restoreUntil === 'string' ? r.restoreUntil.slice(0, 30) : '' };   // deleted, can still be restored at the counter
+        return r && r.ok ? norm(r.card) : null;
+      });
     }
     // The page only ever shows plain numbers, dates and a yes/no from the server, whatever it sends
     function norm(c) {
@@ -523,16 +555,24 @@
     }
     function apply(card) {
       if (!card) { state.error = true; return true; }
+      if (card.deleted) {                       // the card was deleted (on another phone, or by someone who had its QR code)
+        var news = !state.deleted; if (news) state.msg = null; state.deleted = card; state.card = null; state.error = false; return news;
+      }
+      if (state.deleted) {                      // staff restored it
+        state.deleted = null; unGone(state.code); state.card = null;
+        state.msg = { text: 'Your card is back! The café restored it.', ok: true };
+      }
       var before = state.card, changed = !before || state.error || before.stamps !== card.stamps || before.freeDrinks !== card.freeDrinks || before.member !== card.member;
       state.error = false;
       if (before) {
-        if (card.freeDrinks > before.freeDrinks) state.msg = { text: 'Enjoy your free drink! A new card has started.', ok: true };
+        if (card.freeDrinks > before.freeDrinks) state.msg = { text: 'Enjoy your free drink! A new card has started.' + (demo ? ' (preview)' : ''), ok: true };
         else if (card.stamps > before.stamps) {
           state.fresh = []; for (var i = before.stamps; i < card.stamps; i++) state.fresh.push(i);
           state.msg = { text: 'New cat stamp: ' + CATNAMES[card.stamps - 1] + '! ' + card.stamps + ' of ' + SIZE + '.' + (!before.member && card.member ? ' Welcome, member No.' + pad(card.member) + '!' : ''), ok: true };
         }
       }
       state.card = card;
+      if (card.member && state.code && !demo) store(MEMBER_KEY, JSON.stringify({ code: state.code, member: card.member }));
       return changed;
     }
 
@@ -589,12 +629,15 @@
         return;
       }
       cardEl.classList.remove('is-sample');
+      if (state.deleted) { renderDeleted(); return; }
       var c = state.card;
       cardEl.innerHTML = c ? cardHTML(c) : '<p class="stamp-wait">' + (state.error ? 'Couldn\'t check your card. Check your internet and try again.' : 'Loading your card…') + '</p>';
       fill();
       var h = '<h3 class="stamp-how__title">Your card</h3>';
       if (demo) h += '<p class="stamp-demo"><b>Preview mode.</b> Not linked to the Google Sheet yet, so this card only lives in this browser. Tap the button under the QR code to see a stamp land.</p>';
-      if (state.msg) h += '<p class="stamp-msg' + (state.msg.ok ? ' stamp-msg--ok' : '') + '" role="status">' + esc(state.msg.text) + '</p>';
+      // a status message stays up for at least 8 seconds, then leaves at the next redraw (it never sticks around for good)
+      if (state.msg && state.msg.at && Date.now() - state.msg.at > 8000) state.msg = null;
+      if (state.msg) { if (!state.msg.at) state.msg.at = Date.now(); h += '<p class="stamp-msg' + (state.msg.ok ? ' stamp-msg--ok' : '') + '" role="status">' + esc(state.msg.text) + '</p>'; }
       h += '<div class="stamp-qr">' + qrSvg(state.code) + '</div>';
       h += '<p class="stamp-how__note">After you order, show this QR code at the counter and we\'ll stamp it. One stamp a visit, one visit a day.</p>';
       if (c && c.stampedToday && c.stamps < SIZE) h += '<p class="stamp-how__note"><b>Today\'s cat is collected.</b> See you again soon!</p>';
@@ -602,18 +645,33 @@
       else h += state.paused || state.error ? '<button class="stamp-link" type="button" data-stamp="check">Check for stamps</button>' : '<p class="stamp-live"><span class="stamp-live__dot" aria-hidden="true"></span>Live: new stamps appear here</p>';
       h += '<div class="stamp-keep"><h4 class="stamp-keep__title">Keep your card safe</h4>' +
         '<button class="cb-btn cb-btn--plain" type="button" data-stamp="save">Save my card</button>' +
-        '<p class="stamp-small">Saves your card\'s QR code as a picture. New phone or cleared browser? Tap “Use a saved card picture” and pick it, and your card comes back.</p>';
+        '<p class="stamp-small">Saves your card\'s QR code as a picture. New phone or cleared browser? Tap “Use a saved card picture” and pick it, and your card comes back.</p>' +
+        '<p class="stamp-small"><b>Keep your QR code to yourself.</b> Anyone who scans it can use or delete your card, so leave it out of photos you post.</p>';
       h += '<button class="stamp-link" type="button" data-stamp="load">Use a saved card picture</button>';
       if (canHome()) h += '<button class="stamp-link" type="button" data-stamp="home">Add Chibiro to your Home Screen</button>';
       if (state.homeHint) h += '<div class="stamp-home" role="note"><p class="stamp-home__title">On iPhone or iPad:</p><ol class="stamp-home__steps">' +
         '<li>Tap the Share button <span class="stamp-home__share" aria-label="Share"></span> (Safari: bottom of the screen; Chrome: top right).</li><li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>' +
         '<p class="stamp-small">Your card comes along and opens from the Chibiro icon like an app, so it\'s much less likely to get cleared.</p>' +
         '<button class="stamp-link" type="button" data-stamp="homeclose">Done</button></div>';
-      if (validCode(load(PREV_KEY)) && load(PREV_KEY) !== state.code) h += '<button class="stamp-link" type="button" data-stamp="back">Switch back to my other card</button>';
+      if (validCode(load(PREV_KEY)) && load(PREV_KEY) !== state.code && !isGone(load(PREV_KEY))) h += '<button class="stamp-link" type="button" data-stamp="back">Switch back to my other card</button>';
       h += '<button class="stamp-link stamp-link--delete" type="button" data-stamp="delete">Delete my card</button>';
       h += '</div><p class="stamp-small">No sign-up. We don\'t ask for your name or phone number.</p>';
       side.innerHTML = h; side.dataset.mode = 'card';
       state.fresh = [];
+    }
+
+    // A card on this phone that was deleted somewhere else: its QR code stays up, so staff can restore it within 7 days
+    function renderDeleted() {
+      var until = state.deleted.until;
+      cardEl.innerHTML = '<p class="stamp-wait">This card was deleted.</p>';
+      var h = '<h3 class="stamp-how__title">Your card</h3>';
+      if (state.msg) h += '<p class="stamp-msg' + (state.msg.ok ? ' stamp-msg--ok' : '') + '" role="status">' + esc(state.msg.text) + '</p>';
+      h += '<p class="stamp-msg" role="status">This card was deleted, maybe on another phone or by someone who saw its QR code.' +
+        (until ? ' If that wasn\'t you, show this QR code at the counter before <b>' + esc(longDate(until)) + '</b> and we can bring it back with its stamps.' : '') + '</p>';
+      h += '<div class="stamp-qr">' + qrSvg(state.code) + '</div>';
+      h += state.paused ? '<button class="stamp-link" type="button" data-stamp="check">Check again</button>' : '<p class="stamp-live"><span class="stamp-live__dot" aria-hidden="true"></span>Live: your card comes back here once it\'s restored</p>';
+      h += '<button class="cb-btn cb-btn--plain" type="button" data-stamp="fresh">Get a new card instead</button>';
+      side.innerHTML = h; side.dataset.mode = 'card'; state.msg = null;
     }
 
     // ---- live updates while the stamp card is on screen ----
@@ -631,7 +689,12 @@
         poll.timer = setTimeout(check, Date.now() - poll.from < 60000 ? 6000 : 12000);
       });
     }
-    if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { var was = onScreen; onScreen = es[0].isIntersecting; if (onScreen && !was && state.code) startLive(); }).observe(cardEl);
+    if ('IntersectionObserver' in window) new IntersectionObserver(function (es) {
+      var was = onScreen; onScreen = es[0].isIntersecting;
+      if (onScreen && !was && state.code) startLive();
+      else if (!onScreen) clearTimeout(poll.timer);             // scrolled away: no more lookups until it is back
+    }).observe(cardEl);
+    else onScreen = true;                                       // very old browsers: treat the card as always on screen
     document.addEventListener('visibilitychange', function () { if (!document.hidden && onScreen && state.code) startLive(); });
 
     // ---- "Add to Home Screen": Android/desktop Chrome offer their own install prompt; iPhones need the Share menu ----
@@ -651,7 +714,7 @@
       var Wd = 540, Ht = 820, cv = document.createElement('canvas'), x = cv.getContext('2d');
       cv.width = Wd; cv.height = Ht; x.imageSmoothingEnabled = false;
       var heads = []; for (var i = 0; i < SIZE; i++) heads.push(loadImg(headURL(i)));
-      var fonts = document.fonts ? Promise.all([document.fonts.load('20px "Press Start 2P"'), document.fonts.load('22px "Pixelify Sans"')]).catch(function () {}) : Promise.resolve();
+      var fonts = document.fonts ? Promise.all([document.fonts.load('24px "Press Start 2P"'), document.fonts.load('22px "Pixelify Sans"')]).catch(function () {}) : Promise.resolve();
       return Promise.all([loadImg(LOGO), fonts].concat(heads)).then(function (r) {
         var logo = r[0], hs = r.slice(2), mid = Wd / 2;
         x.fillStyle = '#2c1a12'; x.fillRect(0, 0, Wd, Ht);
@@ -659,8 +722,8 @@
         x.fillStyle = '#e8d3a6'; [[22, 22, Wd - 44, 3], [22, Ht - 25, Wd - 44, 3], [22, 22, 3, Ht - 44], [Wd - 25, 22, 3, Ht - 44]].forEach(function (b) { x.fillRect(b[0], b[1], b[2], b[3]); });
         if (logo) x.drawImage(logo, mid - 126, 44, 252, 129);
         x.fillStyle = '#2c1a12'; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
-        x.font = '20px "Press Start 2P", monospace'; x.fillText('STAMP CARD', mid, 212);
-        var no = state.card && state.card.member ? 'MEMBER NO.' + pad(state.card.member) : '';
+        x.font = '24px "Press Start 2P", monospace'; x.fillText('STAMP CARD', mid, 212);   // pixel font on its 8 px grid (8/12/16/24)
+        var mem = (state.card && state.card.member) || knownMember(code), no = mem ? 'MEMBER NO.' + pad(mem) : '';
         x.fillStyle = '#6b4a3a'; x.font = '12px "Press Start 2P", monospace'; if (no) x.fillText(no, mid, 238);
         var q = qrcode(0, 'M'); q.addData(cardLink(code)); q.make();
         var n = q.getModuleCount(), cell = Math.floor(340 / (n + 4)), size = cell * (n + 4), qx = Math.round(mid - size / 2), qy = 258;
@@ -673,7 +736,7 @@
         x.fillText('Lost your card? Scan this with', mid, ty); x.fillText('your phone camera to bring it back.', mid, ty + 28);
         var hy = ty + 56, gap = 6, hw = 40, total = SIZE * hw + (SIZE - 1) * gap, hx = mid - total / 2;
         hs.forEach(function (im, k) { if (im) x.drawImage(im, hx + k * (hw + gap), hy, hw, hw); });
-        x.font = '10px "Press Start 2P", monospace'; x.fillStyle = '#6b4a3a'; x.fillText('CHIBIRO COFFEE · LIKAS', mid, Ht - 44);
+        x.font = '12px "Press Start 2P", monospace'; x.fillStyle = '#6b4a3a'; x.fillText('CHIBIRO COFFEE · LIKAS', mid, Ht - 44);
         return new Promise(function (ok) { cv.toBlob(function (b) { ok(b); }, 'image/png'); });
       });
     }
@@ -703,10 +766,11 @@
     // ---- "Delete my card": removes the card from the Google Sheet (logged there as "deleted") and from this phone ----
     function deleteCard(btn) {
       var n = state.card ? state.card.stamps : 0;
-      if (!window.confirm('Delete your Chibiro stamp card for good?\n\n' + (n ? 'Your ' + n + ' stamp' + (n > 1 ? 's' : '') + ' will be lost. ' : '') + 'This can\'t be undone, and a saved card picture will stop working.')) return;
-      var gone = function () {
-        stopLive(); store(CARD_KEY, null); if (demo) store(DEMO_KEY, null);
-        state.code = null; state.card = null; state.homeHint = false; state.msg = { text: 'Your card is deleted. You can get a new one any time.', ok: true };
+      if (!window.confirm('Delete your Chibiro stamp card?\n\n' + (n ? 'Your ' + n + ' stamp' + (n > 1 ? 's' : '') + ' will go with it. ' : '') + 'It stops working right away. For 7 days the café can still bring it back if you show its QR code at the counter (a saved card picture works). After that it is erased for good.')) return;
+      var gone = function (until) {
+        stopLive(); markGone(state.code); store(CARD_KEY, null); store(MEMBER_KEY, null); if (demo) store(DEMO_KEY, null);
+        state.code = null; state.card = null; state.deleted = null; state.homeHint = false;
+        state.msg = { text: 'Your card is deleted. ' + (until ? 'Changed your mind? Show a saved card picture at the counter before ' + longDate(until) + ' and we can bring it back. ' : '') + 'You can get a new card any time.', ok: true };
         if (/card=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search + '#stamps');
         render();
       };
@@ -714,13 +778,16 @@
       btn.disabled = true;
       fetch(STAMP_API, { method: 'POST', body: JSON.stringify({ action: 'delete', card: state.code }), redirect: 'follow' })
         .then(function (r) { return r.json(); })
-        .then(function (r) { if (r && r.ok) gone(); else throw new Error('not deleted'); })
+        .then(function (r) { if (r && r.ok) gone(typeof r.restoreUntil === 'string' ? r.restoreUntil.slice(0, 30) : ''); else throw new Error('not deleted'); })
         .catch(function () { btn.disabled = false; say('Couldn\'t delete your card right now. Check your internet and try again.', false); });
     }
 
     // ---- "I have a saved card picture": pick the Save my card picture from Photos; jsQR reads its QR code here on the phone ----
+    var picker = null;
     function loadPicture() {
-      var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+      // one hidden file input that stays in the page: on some iPhones a detached one is thrown away while Photos is open
+      if (!picker) { picker = document.createElement('input'); picker.type = 'file'; picker.accept = 'image/*'; picker.hidden = true; picker.setAttribute('aria-hidden', 'true'); picker.tabIndex = -1; document.body.appendChild(picker); }
+      var inp = picker; inp.value = '';
       inp.onchange = function () {
         var f = inp.files && inp.files[0]; if (!f) return;
         var ready = window.jsQR ? Promise.resolve() : new Promise(function (ok, no) { var s = document.createElement('script'); s.src = 'jsQR.js'; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
@@ -730,9 +797,9 @@
             if (!im) throw 0;
             var sc = Math.min(1, 1600 / Math.max(im.width, im.height)), cv = document.createElement('canvas'), x = cv.getContext('2d');
             cv.width = Math.round(im.width * sc); cv.height = Math.round(im.height * sc); x.drawImage(im, 0, 0, cv.width, cv.height);
-            var d = x.getImageData(0, 0, cv.width, cv.height), r = window.jsQR(d.data, d.width, d.height), m = r && /card=([A-Za-z0-9_-]{22})/.exec(r.data || '');
+            var d = x.getImageData(0, 0, cv.width, cv.height), r = window.jsQR(d.data, d.width, d.height), m = r && /(?:^|[#&?])card=([A-Za-z0-9_-]{22})(?:&|$)/.exec(String(r.data || '').trim());
             if (!m) { say('Couldn\'t find a Chibiro card in that picture. Pick the picture from Save my card.', false); return; }
-            if (switchTo(m[1])) { say('Your card is back on this phone.', true); startLive(); } else render();
+            (isGone(m[1]) ? tryGone(m[1], false) : Promise.resolve(switchTo(m[1]))).then(function (ok) { if (ok) { say('Your card is back on this phone.', true); startLive(); } else render(); });
           }).catch(function () { say('Couldn\'t open that picture. Try again.', false); });
         };
         rd.readAsDataURL(f);
@@ -741,10 +808,23 @@
     }
 
     function say(text, ok) { state.msg = { text: text, ok: ok }; render(); }
+    // A card deleted on this phone comes back only if the café restored it (within 7 days of the deletion)
+    function tryGone(code, quiet) {
+      var no = function (r) {
+        if (!quiet) state.msg = { text: r && r.ok && r.deleted && r.restoreUntil ? 'That card was deleted. To bring it back, show its QR code at the counter before ' + longDate(String(r.restoreUntil).slice(0, 30)) + '.' : 'That card was deleted, so it can\'t come back. Tap Get my card for a new one.', ok: false };
+        return false;
+      };
+      if (demo) return Promise.resolve(no(null));
+      return lookup(code).then(function (r) {
+        if (r && r.ok && !r.deleted && r.card && Number(r.card.member) > 0) { unGone(code); return switchTo(code); }   // restored by staff
+        return no(r);
+      });
+    }
     // A card link or a pasted link only replaces this phone's card after asking. The card it replaces is kept,
     // so "Switch back to my other card" can bring it back. Returns true when the new card is now in use.
     function switchTo(code) {
       if (code === state.code) { state.msg = { text: 'This card is already on this phone.', ok: true }; return false; }
+      if (isGone(code)) { state.msg = { text: 'That card was deleted on this phone, so it can\'t come back. Tap Get my card for a new one.', ok: false }; return false; }
       if (state.code && !window.confirm('This phone already has a Chibiro stamp card.\n\nSwap to the card from this link? Your card stays saved on this phone, so you can switch back.')) {
         state.msg = { text: 'Kept your own card. Nothing changed.', ok: true }; return false;
       }
@@ -756,8 +836,9 @@
       var act = b.dataset.stamp;
       if (act === 'get') { state.code = newCode(); store(CARD_KEY, state.code); state.card = null; state.msg = { text: 'Your card is ready! Show the QR code when you order.', ok: true }; render(); startLive(); }
       else if (act === 'check') { state.msg = null; startLive(); }
-      else if (act === 'back') { var prev = load(PREV_KEY); if (validCode(prev)) { store(PREV_KEY, state.code); state.code = prev; store(CARD_KEY, prev); state.card = null; say('Switched back to your other card.', true); startLive(); } }
-      else if (act === 'demo') { var before = state.card; state.card = before; apply(demoStamp()); render(); }
+      else if (act === 'fresh') { markGone(state.code); store(MEMBER_KEY, null); state.deleted = null; state.code = newCode(); store(CARD_KEY, state.code); state.card = null; state.msg = { text: 'Your new card is ready! Show the QR code when you order.', ok: true }; render(); startLive(); }
+      else if (act === 'back') { var prev = load(PREV_KEY); if (validCode(prev) && !isGone(prev)) { store(PREV_KEY, state.code); state.code = prev; store(CARD_KEY, prev); state.card = null; say('Switched back to your other card.', true); startLive(); } }
+      else if (act === 'demo') { apply(demoStamp()); render(); }
       else if (act === 'save') saveCard(b);
       else if (act === 'home') {
         if (installEvt) { var ev = installEvt; installEvt = null; ev.prompt(); (ev.userChoice || Promise.resolve()).then(function () { render(); }); }
@@ -778,7 +859,12 @@
     if (staffSetting === 'on' || staffSetting === 'off') {
       store(STAFF_KEY, staffSetting === 'on' ? '1' : null);
       state.msg = { text: staffSetting === 'on' ? 'This phone is now the café phone. Scan cards with the staff scanner (staff.html on this site), not the camera app.' : 'This phone is no longer the café phone.', ok: true };
-      if (!state.code) state.code = newCode(), store(CARD_KEY, state.code);
+    } else if (validCode(scanned) && scanned !== state.code && isGone(scanned)) {   // deleted on this phone: back only if the café restored it
+      var hadCard = !!state.code;                                                  // (an old Home Screen icon of a deleted card just opens the page)
+      tryGone(scanned, homeStep).then(function (ok) {
+        if (ok) { state.msg = { text: hadCard ? 'This card is now on this phone.' : 'Your card is back on this phone.', ok: true }; render(); startLive(); }
+        else render();
+      });
     } else if (validCode(scanned) && scanned !== state.code) {
       var had = !!state.code;
       if (switchTo(scanned)) state.msg = { text: had ? 'This card is now on this phone.' : 'Your card is back on this phone.', ok: true };
@@ -1004,13 +1090,19 @@
       c.el.classList.toggle('is-flip', c.face < 0);
     }
     layout(); dc.forEach(function (c) { place(c); }); wPlace();
-    var rt; window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(layout, 150); });
-    // the loop only runs while the footer yard is on screen; off screen it stops completely
-    var seen = true, prevT = 0, lastPaint = 0, running = false;
-    function start() { if (running || !seen) return; running = true; prevT = performance.now(); requestAnimationFrame(tick); }
+    var rt; window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { layout(); start(); }, 150); });
+    // the loop only runs while the footer yard is on screen; off screen it stops completely. Held still (Sleepy or reduce
+    // motion) it draws the yard at rest and stops too, until Cat Mode changes, a cat is tapped or the window resizes.
+    var seen = true, prevT = 0, lastPaint = 0, running = false, calm = 0;
+    function start() { if (running || !seen) return; running = true; calm = 0; lastPaint = 0; prevT = performance.now(); requestAnimationFrame(tick); }
+    onMotion.push(start);
+    box.addEventListener('click', start);
     if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { seen = es[0].isIntersecting; start(); }).observe(den);
     function tick(t) {
       if (!seen) { running = false; return; }
+      var busy = !still() || walker.petUntil || dc.some(function (c) { return t < c.happy + 400; });
+      if (!busy && ++calm > 3) { paint(t); running = false; return; }   // a last settled frame, then rest
+      if (busy) calm = 0;
       var dt = Math.min(0.05, (t - prevT) / 1000 || 0.016); prevT = t;
       moveWalker(t, dt); if (t - lastPaint > 60) { lastPaint = t; paint(t); }
       dc.forEach(function (c) {
@@ -1064,8 +1156,8 @@
     el.className = 'cb-sleeper'; el.setAttribute('aria-hidden', 'true'); cv.width = cv.height = 32; el.appendChild(cv); hero.appendChild(el);
     return { key: d[0], B: d[1], el: el, cv: cv, cx: cv.getContext('2d'), cache: {}, cur: '', size: 0 };
   });
-  function placeSleepers(t, hx, hy) {
-    var SC = window.ChibiroScene, info = SC && SC.info ? SC.info() : null;
+  function placeSleepers(t, hx, hy, info) {           // info: the scene's layout, already read once this frame
+    var SC = window.ChibiroScene;
     sleepers.forEach(function (z) {
       var at = SC && SC.sleepers && SC.sleepers[z.key];
       if (!info || !info.W || !at) { z.el.style.display = 'none'; return; }
@@ -1228,7 +1320,7 @@
     var foot = s * 29.5 / 32;                                                     // sprite feet sit 2.5px above its bottom
     var ground = inHero ? r.top + r.height * 0.55 - foot : r.bottom - foot - ledge;   // Sleepy: curled up at the foot of the hero
 
-    var SC = window.ChibiroScene, info = inHero && SC ? SC.info() : null, dts = dt * 16.7 / 1000;
+    var SC = window.ChibiroScene, sceneInfo = SC && SC.info ? SC.info() : null, info = inHero ? sceneInfo : null, dts = dt * 16.7 / 1000;
     if (info && info.W) {
       if (info.scale) SCL = info.scale;
       if (!G || G.ver !== info.ver) { G = buildGrid(info); yarn.ready = false; cats.forEach(function (c) { c.ready = false; }); }
@@ -1344,6 +1436,7 @@
         }
       } else if (!special) {
       if (c.act || c.goal) { if (c.act && c.act.id) delete taken[c.act.id]; c.act = null; c.goal = null; c.chase = null; c.flee = null; c.lift = 0; c.gy = null; c.pose = null; }
+      if (c._hy != null && c.y >= 0) { c.x += hx - c._hx; c.y += hy - c._hy; }   // keep the glide relative to the hero, so scrolling never drags the cats
       if (!playful) {                                   // Sleepy: docked bottom-right
         tx = W - ledge - packW + c.i * (s + gap);
       } else {                                          // IDLE_PLAY
@@ -1387,6 +1480,7 @@
       var bob = moving && c.bounce ? (step % 4 < 2 ? -c.bounce : 0) : 0;
       var y = c.y + bob;
       c.el.style.transform = 'translate3d(' + Math.round(c.x - hx) + 'px,' + Math.round(y - hy) + 'px,0)';
+      c._hx = hx; c._hy = hy;
     });
     if (info && info.W && yarn.ready && !yarn.path.length && t > yarn.kickCool) cats.some(function (c) {   // a cat touching the ball bats it away
       if (!c.ready || c.act || !hit(catBox(c.ax, c.ay), [yarn.ax - 3, yarn.ay - 5, yarn.ax + 3, yarn.ay + 1])) return false;
@@ -1413,12 +1507,23 @@
       cats.forEach(function (c) { c.cv.style.filter = f; }); yarnEl.style.filter = f;
       sleepers.forEach(function (z) { z.cv.style.filter = f; });
     }
-    placeSleepers(t, hx, hy);
-    if (heroOn) requestAnimationFrame(frame); else running = false;
+    placeSleepers(t, hx, hy, sceneInfo);
+    // Sleepy: once every cat has curled up at the foot of the hero and nothing is left to draw, the loop rests
+    var settled = !playful;
+    cats.forEach(function (c) {                             // still on the same screen pixel as last frame, and not being petted
+      var at = Math.round(c.x - hx) + ',' + Math.round(c.y - hy);
+      if (at !== c._at || t < c.petUntil + 400) settled = false;
+      c._at = at;
+    });
+    calmFrames = settled ? calmFrames + 1 : 0;
+    if (heroOn && calmFrames < 20) requestAnimationFrame(frame); else running = false;
   }
-  // the hero cats only animate while the hero is on screen; the last frame above hides them, then the loop stops
-  var heroOn = true, running = false;
-  function startCats() { if (running) return; running = true; prev = performance.now(); requestAnimationFrame(frame); }
+  // the hero cats only animate while the hero is on screen; the last frame above hides them, then the loop stops.
+  // In Sleepy mode it also stops once the cats are settled, and wakes for Cat Mode, a resize or a tapped cat.
+  var heroOn = true, running = false, calmFrames = 0;
+  function startCats() { calmFrames = 0; if (running || !heroOn) return; running = true; prev = performance.now(); requestAnimationFrame(frame); }
+  onMotion.push(startCats);
+  window.addEventListener('resize', startCats);
   if ('IntersectionObserver' in window) new IntersectionObserver(function (es) { heroOn = es[0].isIntersecting; if (heroOn) startCats(); }).observe(hero);
   startCats();
 
@@ -1427,6 +1532,7 @@
   function meow() {
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended' && ac.resume) ac.resume();   // iPhones pause the sound after Safari has been in the background
       var o = ac.createOscillator(), g = ac.createGain(), now = ac.currentTime;
       o.type = 'square'; o.frequency.setValueAtTime(760, now); o.frequency.linearRampToValueAtTime(520, now + 0.16);
       g.gain.setValueAtTime(0.04, now); g.gain.linearRampToValueAtTime(0, now + 0.2);
@@ -1440,6 +1546,7 @@
     el.classList.remove('is-petted'); void el.offsetWidth; el.classList.add('is-petted');
     clearTimeout(el._t); el._t = setTimeout(function () { el.classList.remove('is-petted'); }, ms);
     if (sound) meow();
+    startCats();
   }
   layer.addEventListener('click', function (e) {
     var el = e.target.closest('.cb-cat'); if (!el) return;
@@ -1453,6 +1560,8 @@
   $('catToggle').addEventListener('click', function () {
     playful = !playful; setToggle(this, playful, playful ? 'Playful' : 'Sleepy');
     if (window.ChibiroScene && window.ChibiroScene.setPaused) window.ChibiroScene.setPaused(!playful);   // Sleepy holds the hero scene still too
+    document.body.classList.toggle('cb--still', still());
+    onMotion.forEach(function (f) { f(); });                // wake (or settle) the cats, the footer and the photos
   });
   setToggle($('catToggle'), playful, playful ? 'Playful' : 'Sleepy');
 })();
