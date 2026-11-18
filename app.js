@@ -485,7 +485,7 @@
 
     // ---- arriving from a scanned QR code (#card=…) or the café phone set-up link (#staff-phone=on|off) ----
     var hash = new URLSearchParams(location.hash.slice(1)), query = new URLSearchParams(location.search);
-    var scanned = hash.get('card'), staffSetting = hash.get('staff-phone');   // only #card=: the part after # never leaves the phone
+    var scanned = hash.get('card'), staffSetting = hash.get('staff-phone'), homeStep = hash.get('home') === '1';   // only #card=: the part after # never leaves the phone
     if (validCode(scanned) && STAMP_STAFF && load(STAFF_KEY) === '1') { location.replace(STAMP_STAFF + '?card=' + encodeURIComponent(scanned)); return; }
 
     var state = { code: load(CARD_KEY), card: null, msg: null, fresh: [], error: false, paused: false, homeHint: false };
@@ -602,10 +602,11 @@
       else h += state.paused || state.error ? '<button class="stamp-link" type="button" data-stamp="check">Check for stamps</button>' : '<p class="stamp-live"><span class="stamp-live__dot" aria-hidden="true"></span>Live: new stamps appear here</p>';
       h += '<div class="stamp-keep"><h4 class="stamp-keep__title">Keep your card safe</h4>' +
         '<button class="cb-btn cb-btn--plain" type="button" data-stamp="save">Save my card</button>' +
-        '<p class="stamp-small">Saves your card\'s QR code as a picture. New phone or cleared browser? Scan the picture with your camera and your card comes back.</p>';
+        '<p class="stamp-small">Saves your card\'s QR code as a picture. New phone or cleared browser? Tap “Use a saved card picture” and pick it, and your card comes back.</p>';
+      h += '<button class="stamp-link" type="button" data-stamp="load">Use a saved card picture</button>';
       if (canHome()) h += '<button class="stamp-link" type="button" data-stamp="home">Add Chibiro to your Home Screen</button>';
-      if (state.homeHint) h += '<div class="stamp-home" role="note"><p class="stamp-home__title">On iPhone or iPad, in Safari:</p><ol class="stamp-home__steps">' +
-        '<li>Tap the Share button <span class="stamp-home__share" aria-label="Share"></span> at the bottom (or top) of Safari.</li><li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>' +
+      if (state.homeHint) h += '<div class="stamp-home" role="note"><p class="stamp-home__title">On iPhone or iPad:</p><ol class="stamp-home__steps">' +
+        '<li>Tap the Share button <span class="stamp-home__share" aria-label="Share"></span> (Safari: bottom of the screen; Chrome: top right).</li><li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>' +
         '<p class="stamp-small">Your card comes along and opens from the Chibiro icon like an app, so it\'s much less likely to get cleared.</p>' +
         '<button class="stamp-link" type="button" data-stamp="homeclose">Done</button></div>';
       if (validCode(load(PREV_KEY)) && load(PREV_KEY) !== state.code) h += '<button class="stamp-link" type="button" data-stamp="back">Switch back to my other card</button>';
@@ -637,6 +638,9 @@
     var installEvt = null;
     var isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     function standalone() { return navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches); }
+    if (!isIOS && !document.querySelector('link[rel="manifest"]')) {   // see the note in index.html
+      var mf = document.createElement('link'); mf.rel = 'manifest'; mf.href = 'manifest.webmanifest'; document.head.appendChild(mf);
+    }
     function canHome() { return !demo && !standalone() && (!!installEvt || isIOS); }
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installEvt = e; if (state.code) render(); });
     window.addEventListener('appinstalled', function () { installEvt = null; if (state.code) say('Chibiro is on your Home Screen. Your card opens from there.', true); });
@@ -714,6 +718,28 @@
         .catch(function () { btn.disabled = false; say('Couldn\'t delete your card right now. Check your internet and try again.', false); });
     }
 
+    // ---- "I have a saved card picture": pick the Save my card picture from Photos; jsQR reads its QR code here on the phone ----
+    function loadPicture() {
+      var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+      inp.onchange = function () {
+        var f = inp.files && inp.files[0]; if (!f) return;
+        var ready = window.jsQR ? Promise.resolve() : new Promise(function (ok, no) { var s = document.createElement('script'); s.src = 'jsQR.js'; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+        var rd = new FileReader();
+        rd.onload = function () {
+          ready.then(function () { return loadImg(rd.result); }).then(function (im) {
+            if (!im) throw 0;
+            var sc = Math.min(1, 1600 / Math.max(im.width, im.height)), cv = document.createElement('canvas'), x = cv.getContext('2d');
+            cv.width = Math.round(im.width * sc); cv.height = Math.round(im.height * sc); x.drawImage(im, 0, 0, cv.width, cv.height);
+            var d = x.getImageData(0, 0, cv.width, cv.height), r = window.jsQR(d.data, d.width, d.height), m = r && /card=([A-Za-z0-9_-]{22})/.exec(r.data || '');
+            if (!m) { say('Couldn\'t find a Chibiro card in that picture. Pick the picture from Save my card.', false); return; }
+            if (switchTo(m[1])) { say('Your card is back on this phone.', true); startLive(); } else render();
+          }).catch(function () { say('Couldn\'t open that picture. Try again.', false); });
+        };
+        rd.readAsDataURL(f);
+      };
+      inp.click();
+    }
+
     function say(text, ok) { state.msg = { text: text, ok: ok }; render(); }
     // A card link or a pasted link only replaces this phone's card after asking. The card it replaces is kept,
     // so "Switch back to my other card" can bring it back. Returns true when the new card is now in use.
@@ -736,15 +762,19 @@
       else if (act === 'home') {
         if (installEvt) { var ev = installEvt; installEvt = null; ev.prompt(); (ev.userChoice || Promise.resolve()).then(function () { render(); }); }
         else {
-          // iPhones open a Home Screen icon at the address it was added from, so put the card in the address while the steps show
-          state.homeHint = true; history.replaceState(null, '', location.pathname + location.search + '#card=' + state.code); render();
+          // iPhones give a Home Screen icon its own storage and open it at the address it was saved from. So reload the page
+          // with the card in its address (#card=…&home=1); the page then keeps that address while the steps show.
+          location.replace(location.pathname + location.search + '#card=' + state.code + '&home=1'); location.reload();
         }
       } else if (act === 'delete') deleteCard(b);
+      else if (act === 'load') loadPicture();
       else if (act === 'homeclose') { state.homeHint = false; history.replaceState(null, '', location.pathname + location.search + '#stamps'); render(); }
     });
 
     // ---- start ----
-    if (scanned || staffSetting) { query.delete('card'); var qs = query.toString(); history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + '#stamps'); }
+    var keepAddress = homeStep && !standalone() && validCode(scanned) && scanned === state.code;   // showing the Home Screen steps
+    if (keepAddress) state.homeHint = true;
+    else if (scanned || staffSetting) { query.delete('card'); var qs = query.toString(); history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + '#stamps'); }
     if (staffSetting === 'on' || staffSetting === 'off') {
       store(STAFF_KEY, staffSetting === 'on' ? '1' : null);
       state.msg = { text: staffSetting === 'on' ? 'This phone is now the café phone. Scan cards with the staff scanner (staff.html on this site), not the camera app.' : 'This phone is no longer the café phone.', ok: true };
@@ -755,7 +785,7 @@
     }
     render();
     if (state.code) fetchCard().then(function (card) { if (apply(card)) render(); });
-    if (scanned || staffSetting) setTimeout(function () { document.getElementById('stamps').scrollIntoView(); }, 300);
+    if (scanned || staffSetting) setTimeout(function () { document.getElementById(keepAddress ? 'stampSide' : 'stamps').scrollIntoView(keepAddress ? { block: 'center' } : undefined); }, 300);
   })();
 
   /* ---------- Footer yard: flat 2D gravel with three table sets (as in the hero); five more cats wander between them ---------- */
