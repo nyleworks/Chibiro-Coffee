@@ -550,3 +550,27 @@ html:has(.about-pop[open]) { overflow: hidden; }
 main:focus { outline: none; }
 /* the empty cell that squares up a phone menu's last page when it holds a single card (app.js) */
 .menu-spacer { pointer-events: none; }
+
+/* menu photos (2026-11-19, from Niekki's ordering-app screenshots): each card shows its photo on top; files in assets/menu/ */
+.cb-item__photo { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; object-fit: cover; image-rendering: auto;
+  border: var(--border-thin) solid var(--roast); background: var(--parchment-deep); margin-bottom: var(--space-1); }
+.cb .cb-item__photo { image-rendering: auto; }
+.menu-grid .cb-item { min-height: 0; }
+
+/* stamp card: goal-gradient extras (welcome bonus, progress bar, a line per stamp, expiry reminder) */
+.stamp-slot.is-bonus { background: var(--strawberry-milk); }
+.stamp-slot.is-bonus .stamp-slot__date { font-family: var(--font-display); font-size: 7px; line-height: 10px; text-transform: uppercase; color: var(--strawberry-deep); }
+.stamp-slot.is-stamped[data-stamp] { cursor: pointer; }
+.stamp-bar { display: flex; align-items: center; gap: var(--space-2); }
+.stamp-bar__track { flex: 1; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 2px; padding: 2px; background: var(--roast); }
+.stamp-bar__seg { height: 12px; background: var(--cream); }
+.stamp-bar__seg.is-on { background: var(--strawberry); box-shadow: inset 0 -3px 0 var(--strawberry-deep); }
+.stamp-bar__seg.is-goal { background: var(--matcha-foam); }
+.stamp-bar__seg.is-goal.is-on { background: var(--matcha); box-shadow: inset 0 -3px 0 var(--matcha-deep); }
+.stamp-bar.is-close .stamp-bar__seg.is-on { background: var(--strawberry-deep); box-shadow: inset 0 3px 0 var(--strawberry); }
+.stamp-bar__goal { flex: none; font-family: var(--font-display); font-size: 8px; line-height: 10px; text-transform: uppercase; color: var(--matcha-deep); }
+.stamp-cheer { display: flex; align-items: baseline; gap: var(--space-2); margin: var(--space-1) 0 0; font-size: 16px; line-height: 22px; font-weight: 700; color: var(--roast); }
+.stamp-cheer__no { flex: none; font-family: var(--font-display); font-size: 8px; line-height: 12px; padding: 1px 4px; color: var(--cream); background: var(--roast); }
+.stamp-nudge { margin: var(--space-2) 0 0; padding: var(--space-2) var(--space-3); font-size: 16px; line-height: 22px; font-weight: 700; color: var(--roast);
+  background: var(--strawberry-milk); border: var(--border-thin) solid var(--strawberry-deep); }
+.stamp-nudge small { display: block; font-size: 14px; line-height: 20px; font-weight: 400; color: var(--roast-soft); }
