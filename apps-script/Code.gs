@@ -35,7 +35,12 @@ var TZ = "Asia/Kuching";
 var CARD_SIZE = 10;
 var EXPIRE_MONTHS = 1;   // an unfinished card clears this many months after its LAST stamp
 var KEEP_DAYS = 183;     // delete cards with no activity for about 6 months (never a full card with a free drink waiting)
-var DELETE_GRACE_DAYS = 7;   // a card the customer deleted can be restored by staff for this many days, then it is erased
+var DELETE_GRACE_DAYS = 7;
+// Goal-gradient bonus stamps. A brand-new card shows WELCOME_BONUS stamps straight away; they are written to the sheet
+// with the card's first real stamp (so that visit is stamp 4). After a free drink the next card starts with NEXT_CARD_BONUS.
+// In the stampDates column a bonus stamp is saved as "b" + its date, e.g. b2026-11-19, so the sheet shows which ones were free.
+var WELCOME_BONUS = 3;
+var NEXT_CARD_BONUS = 1;   // a card the customer deleted can be restored by staff for this many days, then it is erased
 // The café phone's QR scanner on the website. The staff page links back to it for the next customer.
 var SCANNER_URL = "https://nyleworks.github.io/Chibiro-Coffee/staff.html";
 
@@ -320,7 +325,7 @@ function lookup_(code) {
   if (!sheetReadAllowed_(cache)) return { ok: false, error: "busy" };
   var found = findCard_(cardsSheet_(), id), out;
   if (found && found.data.deletedAt) out = { ok: true, card: view_(blankCard_("")), deleted: true, restoreUntil: restoreUntil_(found.data) };
-  else out = { ok: true, card: view_(found ? found.data : blankCard_("")) };
+  else out = { ok: true, card: view_(found ? found.data : welcomeCard_("")) };   // not in the sheet yet: the 3 welcome stamps
   cache.put("v:" + id, JSON.stringify(out), found ? LOOKUP_CACHE_SECONDS : UNKNOWN_CACHE_SECONDS);
   return out;
 }
@@ -366,7 +371,7 @@ function staffCard(code) {
   requireStaff_();
   if (!validCode_(code)) return { ok: false, error: "bad_card" };
   var id = fingerprint_(code), found = findCard_(cardsSheet_(), id);
-  var card = view_(found ? found.data : blankCard_(""));
+  var card = view_(found ? found.data : welcomeCard_(""));
   if (found && found.data.deletedAt) return { ok: true, card: card, deleted: true, deletedAt: found.data.deletedAt, restoreUntil: restoreUntil_(found.data) };
   if (!card.stampedToday && found && stampedTodayInLog_(found.data.member)) card.stampedToday = true;
   return { ok: true, card: card };
@@ -377,7 +382,7 @@ function staffStamp(code) {
   if (!validCode_(code)) return { ok: false, error: "bad_card" };
   var out = withLock_(function () {
     var sh = cardsSheet_(), id = fingerprint_(code);
-    var found = findCard_(sh, id) || { row: 0, data: blankCard_(id) };
+    var found = findCard_(sh, id) || { row: 0, data: welcomeCard_(id) };   // a first visit: the welcome stamps come along
     var c = found.data, now = new Date(), today = todayStr_();
     if (c.deletedAt) return { ok: false, error: "deleted", card: view_(c) };
     expire_(c, now);
@@ -389,12 +394,13 @@ function staffStamp(code) {
     // The member number comes with the very first stamp and stays with the card for good
     var isNew = false;
     if (!c.member) { c.member = nextMember_(); isNew = true; }
-    if (c.stamps === 0) c.cardStart = now.toISOString();
+    if (c.stamps === 0 || !c.cardStart) c.cardStart = now.toISOString();
     c.stamps += 1;
     c.stampDates.push(today);
     c.lastStampDate = today;
     c.lastActivity = now.toISOString();
     saveCard_(sh, found);
+    if (isNew && bonusCount_(c)) log_(now, c.member, "bonus", bonusCount_(c), "", "");   // the welcome stamps, so the Log shows them
     log_(now, c.member, "stamp", c.stamps, "", "");
     return { ok: true, newMember: isNew, card: view_(c) };
   });
@@ -416,8 +422,10 @@ function staffFreeDrink(code, drink) {
     var days = c.cardStart ? Math.max(0, Math.round((now - new Date(c.cardStart)) / 864e5)) : "";
     resetCard_(c);
     c.freeDrinks += 1; c.lastActivity = now.toISOString();
+    giveBonus_(c, NEXT_CARD_BONUS, now);   // the next card starts with a bonus stamp, so it never falls back to zero
     saveCard_(sh, found);
     log_(now, c.member, "free_drink", "", drink, days);
+    if (NEXT_CARD_BONUS) log_(now, c.member, "bonus", c.stamps, "", "");
     return { ok: true, card: view_(c) };
   });
   forget_(code);
@@ -482,13 +490,31 @@ function housekeeping() {
 // Worked out in Kota Kinabalu time (UTC+8, no daylight saving) whatever the script's own time zone is: the card runs
 // until 11:59:59 PM on the same day of the month, or the month's last day when it is shorter (31 Jan -> 28 Feb, not 3 Mar).
 function expiryOf_(c) {
-  if (!c.lastStampDate || !c.stamps) return null;
-  var p = c.lastStampDate.split("-"), y = Number(p[0]), m = Number(p[1]) - 1 + EXPIRE_MONTHS, day = Number(p[2]);
+  var lastDay = lastDay_(c);
+  if (!lastDay || !c.stamps) return null;
+  var p = lastDay.split("-"), y = Number(p[0]), m = Number(p[1]) - 1 + EXPIRE_MONTHS, day = Number(p[2]);
   if (!y || isNaN(m) || !day) return null;
   y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
   var monthEnd = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
   return new Date(Date.UTC(y, m, Math.min(day, monthEnd), 23 - 8, 59, 59));   // 23:59:59 at UTC+8
 }
+
+// The card's newest stamp day, bonus stamps included (a bonus stamp after a free drink starts the month too).
+// lastStampDate stays the day of the last real stamp, which is what the one-stamp-a-day rule checks.
+function lastDay_(c) {
+  var d = c.lastStampDate || "";
+  c.stampDates.forEach(function (s) { s = plainDate_(s); if (s > d) d = s; });
+  return d;
+}
+function plainDate_(s) { return String(s).replace(/^b/, ""); }
+function bonusCount_(c) { var n = 0; while (n < c.stamps && /^b/.test(c.stampDates[n] || "")) n++; return n; }
+function giveBonus_(c, n, now) {
+  var day = Utilities.formatDate(now, TZ, "yyyy-MM-dd");
+  for (var i = 0; i < n && c.stamps < CARD_SIZE; i++) { c.stamps += 1; c.stampDates.push("b" + day); }
+  if (n && !c.cardStart) c.cardStart = now.toISOString();
+}
+// A code that is not in the sheet yet: a new card with its welcome stamps (saved only once staff give the first real stamp)
+function welcomeCard_(id) { var c = blankCard_(id); giveBonus_(c, WELCOME_BONUS, new Date()); c.cardStart = ""; return c; }
 
 function resetCard_(c) { c.stamps = 0; c.cardStart = ""; c.stampDates = []; }
 
@@ -510,9 +536,10 @@ function view_(c) {
   return {
     member: c.member || 0,
     stamps: stamps,
+    bonus: Math.min(bonusCount_(c), stamps),
     size: CARD_SIZE,
-    dates: dates.slice(0, stamps),
-    expires: stamps > 0 && stamps < CARD_SIZE && end ? end.toISOString() : null,
+    dates: dates.slice(0, stamps).map(plainDate_),
+    expires: stamps > 0 && stamps < CARD_SIZE && end && c.member ? end.toISOString() : null,   // a welcome card not yet in the sheet has no end date
     stampedToday: c.lastStampDate === todayStr_(),
     freeDrinks: c.freeDrinks
   };
@@ -718,7 +745,7 @@ var STAFF_HTML_ = [
   'if(card.stamps>=SIZE){h+="<select id=drink><option value=\\"\\">Which drink? (optional)</option>";drinks.forEach(function(d){h+="<option>"+esc(d)+"</option>"});h+="</select><button class=\\"btn green\\" id=free>Give free drink</button>"}',
   'else if(!ok||ok==="restored"){h+="<button class=btn id=stamp"+(card.stampedToday?" disabled":"")+">Add stamp</button>";if(card.stampedToday&&!msg)h+="<p class=note>Already stamped today. One visit a day.</p>"}',
   'h+="</div><a class=\\"btn plain\\" href=\\""+esc(SCANNER)+"\\">Scan next card</a><p class=note>Opens the staff scanner. Scan cards there, not with the phone\'s own camera app.</p>";app.innerHTML=h;',
-  'var s=document.getElementById("stamp");if(s)s.onclick=function(){call("staffStamp",[CARD],function(r){var m;if(r.ok){m="Stamp added: "+CATS[r.card.stamps-1]+". "+r.card.stamps+" of "+SIZE+".";if(r.newMember)m+=" New member No."+pad(r.card.member)+"!"}else if(r.error==="deleted")return load();else m=MSG[r.error]||"Something went wrong.";show(r.card||card,m,r.ok)})};',
+  'var s=document.getElementById("stamp");if(s)s.onclick=function(){call("staffStamp",[CARD],function(r){var m;if(r.ok){m="Stamp added: "+CATS[r.card.stamps-1]+". "+r.card.stamps+" of "+SIZE+".";if(r.newMember)m+=" New member No."+pad(r.card.member)+"! (3 welcome stamps + today\'s)"}else if(r.error==="deleted")return load();else m=MSG[r.error]||"Something went wrong.";show(r.card||card,m,r.ok)})};',
   'var f=document.getElementById("free");if(f)f.onclick=function(){call("staffFreeDrink",[CARD,document.getElementById("drink").value],function(r){if(!r.ok&&r.error==="deleted")return load();show(r.card||card,r.ok?"Free drink given. A new card has started.":MSG[r.error]||"Something went wrong.",r.ok)})}}',
   'function summary(){call("staffSummary",[],function(r){var h="<div class=box><p class=note style=\\"margin-top:0\\">To stamp a card, open the staff scanner and scan the customer\'s QR code there.</p><a class=\\"btn green\\" href=\\""+esc(SCANNER)+"\\">Open the staff scanner</a></div><h1 style=\\"font-size:12px\\">Numbers</h1><table>";',
   '(r.rows||[]).forEach(function(x){h+="<tr><td>"+esc(x[0])+"</td><td>"+esc(x[1])+"</td></tr>"});app.innerHTML=h+"</table><p class=note>More detail is in the Summary tab of the Google Sheet.</p>"})}',

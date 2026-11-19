@@ -10,12 +10,12 @@
     scrollTo: function (o) { window.scrollTo(o); }
   };
 
-  /* ---------- Menu: Drinks / Snacks pages, 4×4 cards per page (2×4 on phones) ---------- */
+  /* ---------- Menu: Drinks / Foods pages, 4×4 cards per page (2×4 on phones) ---------- */
   // The whole menu is written in index.html (#menu: one .menu-group per category, one .cb-item per item), so search engines
-  // read every item. This only builds the Drinks / Snacks switch, the category chips and the pager, and hides the cards
+  // read every item. This only builds the Drinks / Foods switch, the category chips and the pager, and hides the cards
   // that are not on the current page (they stay in the page, so nothing is lost for Google or screen-reader search).
   var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
-  var menuEl = $('menu'), SHELVES = [['drinks', 'Drinks'], ['snacks', 'Snacks']], MENU = {};
+  var menuEl = $('menu'), SHELVES = [['drinks', 'Drinks'], ['snacks', 'Foods']], MENU = {};
   SHELVES.forEach(function (s) {
     MENU[s[0]] = [].slice.call(menuEl.querySelectorAll('.menu-group[data-shelf="' + s[0] + '"]')).map(function (g) {
       return { el: g, cat: g.querySelector('.menu-group__title').textContent, items: [].slice.call(g.querySelectorAll('.cb-item')) };
@@ -41,7 +41,7 @@
     page = Math.max(0, Math.min(pages - 1, page));
     $('tabs').innerHTML = '<div class="menu-shelves" role="group" aria-label="Menu">' + SHELVES.map(function (t) {
       return '<button class="cb-tab" type="button" aria-pressed="' + (t[0] === shelf) + '" aria-controls="menu" data-shelf="' + t[0] + '">' + t[1] + '</button>';
-    }).join('') + '</div><div class="menu-cats" role="group" aria-label="' + (shelf === 'drinks' ? 'Drink' : 'Snack') + ' categories">' + MENU[shelf].map(function (g, i) {
+    }).join('') + '</div><div class="menu-cats" role="group" aria-label="' + (shelf === 'drinks' ? 'Drink' : 'Food') + ' categories">' + MENU[shelf].map(function (g, i) {
       return '<button class="menu-cat" type="button" aria-pressed="' + (i === cat[shelf]) + '" data-cat="' + i + '">' + esc(g.cat) + ' <span class="menu-cat__n">' + g.items.length + '</span></button>';
     }).join('') + '</div>';
     SHELVES.forEach(function (s) { MENU[s[0]].forEach(function (g) { g.el.hidden = g !== group; }); });
@@ -486,6 +486,12 @@
     var SIZE = 10, CARD_KEY = 'chibiro-card', PREV_KEY = 'chibiro-card-previous', STAFF_KEY = 'chibiro-staff-phone', DEMO_KEY = 'chibiro-card-demo', TZ = 'Asia/Kuching';
     var GONE_KEY = 'chibiro-deleted-cards', MEMBER_KEY = 'chibiro-card-member';   // cards deleted on this phone; the card's last known member number
     var CATNAMES = ['Calico', 'Orange Tabby', 'Siamese', 'Tuxedo', 'Scottish Fold', 'Black Cat', 'Tortoiseshell', 'Grey Tabby', 'Snow', 'Ginger & White'];
+    // Goal-gradient rules (the same numbers as in Code.gs): a first card starts with 3 welcome stamps, the card after a
+    // free drink starts with 1, and a card with 7+ stamps gets a reminder in its last 7 days. Each stamp has its own line.
+    var WELCOME = 3, NEXT_BONUS = 1, NUDGE_FROM = 7, NUDGE_DAYS = 7;
+    var CHEERS = ['Welcome to the Chibiro family!', 'The cats already like you.', 'A 3-stamp head start, on us!', 'Your first stamp of your own. Nice one!',
+      'Halfway there. Purr-fect pace!', 'More cats are joining your card.', 'Only 3 more to your free drink!', 'So close you can smell the coffee.',
+      'Just 1 more. The next one\'s on us!', 'You did it! Your free drink is waiting.'];
     var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var demo = !STAMP_API;
     function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } }
@@ -504,6 +510,13 @@
     function unGone(code) { if (isGone(code)) store(GONE_KEY, JSON.stringify(goneList().filter(function (c) { return c !== code; }))); }
     // the member number is remembered, so a card picture saved before the card has loaded still shows it
     function knownMember(code) { try { var m = JSON.parse(load(MEMBER_KEY) || 'null'); return m && m.code === code ? Math.floor(Number(m.member)) || 0 : 0; } catch (e) { return 0; } }
+    // whole days from today to a card's last day, both in Kota Kinabalu time (0 = it ends tonight)
+    function daysLeft(iso) {
+      try {
+        var end = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(iso)).split('-'), now = todayIso().split('-');
+        return Math.round((Date.UTC(+end[0], end[1] - 1, +end[2]) - Date.UTC(+now[0], now[1] - 1, +now[2])) / 864e5);
+      } catch (e) { return null; }
+    }
     function todayIso() { try { return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date()); } catch (e) { return new Date().toISOString().slice(0, 10); } }
 
     // ---- arriving from a scanned QR code (#card=…) or the café phone set-up link (#staff-phone=on|off) ----
@@ -511,25 +524,27 @@
     var scanned = hash.get('card'), staffSetting = hash.get('staff-phone'), homeStep = hash.get('home') === '1';   // only #card=: the part after # never leaves the phone
     if (validCode(scanned) && STAMP_STAFF && load(STAFF_KEY) === '1') { location.replace(STAMP_STAFF + '?card=' + encodeURIComponent(scanned)); return; }
 
-    var state = { code: load(CARD_KEY), card: null, deleted: null, msg: null, fresh: [], error: false, paused: false, homeHint: false };
+    var state = { code: load(CARD_KEY), card: null, deleted: null, msg: null, fresh: [], cheer: -1, error: false, paused: false, homeHint: false };
     if (!validCode(state.code)) state.code = null;
 
     // ---- talking to the sheet (or the in-browser preview) ----
+    var demoMem = null;   // preview only: keeps the card in memory when the browser blocks storage
+    function demoSave(d) { demoMem = d ? JSON.stringify(d) : null; store(DEMO_KEY, demoMem); }
     function demoCard() {
-      var d = null; try { d = JSON.parse(load(DEMO_KEY) || 'null'); } catch (e) { d = null; }
-      d = d || { member: 0, stamps: 0, dates: [], freeDrinks: 0 };
-      var last = d.dates[d.dates.length - 1], exp = null;
+      var d = null; try { d = JSON.parse(load(DEMO_KEY) || demoMem || 'null'); } catch (e) { d = null; }
+      d = d || { member: 0, stamps: WELCOME, bonus: WELCOME, dates: ['', '', ''], freeDrinks: 0 };   // a new card: 3 welcome stamps
+      var last = d.dates.filter(Boolean).pop(), exp = null;
       if (d.stamps > 0 && d.stamps < SIZE && last) {        // one month on, at 11:59:59 PM Kota Kinabalu time (31 Jan -> 28 Feb)
         var q = String(last).split('-'), y = +q[0], mo = +q[1], dd = +q[2], end = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
         exp = new Date(Date.UTC(y, mo, Math.min(dd, end), 15, 59, 59)).toISOString();
       }
-      return { member: d.member, stamps: d.stamps, size: SIZE, dates: d.dates, expires: exp, stampedToday: false, freeDrinks: d.freeDrinks };
+      return { member: d.member, stamps: d.stamps, bonus: d.bonus || 0, size: SIZE, dates: d.dates, expires: exp, stampedToday: false, freeDrinks: d.freeDrinks };
     }
     function demoStamp() {
       var c = demoCard();
-      if (c.stamps >= SIZE) { c.stamps = 0; c.dates = []; c.freeDrinks += 1; }   // apply() writes the message
+      if (c.stamps >= SIZE) { c.stamps = NEXT_BONUS; c.bonus = NEXT_BONUS; c.dates = [todayIso()]; c.freeDrinks += 1; }   // the next card starts with 1 bonus stamp
       else { if (!c.member) c.member = 308; c.stamps += 1; c.dates = c.dates.concat([todayIso()]); }
-      store(DEMO_KEY, JSON.stringify({ member: c.member, stamps: c.stamps, dates: c.dates, freeDrinks: c.freeDrinks }));
+      demoSave({ member: c.member, stamps: c.stamps, bonus: c.bonus, dates: c.dates, freeDrinks: c.freeDrinks });
       return demoCard();
     }
     // A plain-text POST keeps this a "simple" request, which Apps Script web apps accept from any site
@@ -549,7 +564,7 @@
     function norm(c) {
       if (!c || typeof c !== 'object') return null;
       var whole = function (v, max) { v = Math.floor(Number(v)) || 0; return Math.max(0, Math.min(max, v)); };
-      return { member: whole(c.member, 999999), stamps: whole(c.stamps, SIZE), size: SIZE,
+      return { member: whole(c.member, 999999), stamps: whole(c.stamps, SIZE), bonus: whole(c.bonus, SIZE), size: SIZE,
         dates: Array.isArray(c.dates) ? c.dates.slice(0, SIZE).map(function (d) { return String(d).slice(0, 10); }) : [],
         expires: typeof c.expires === 'string' ? c.expires.slice(0, 30) : null, stampedToday: c.stampedToday === true, freeDrinks: whole(c.freeDrinks, 999999) };
     }
@@ -565,12 +580,15 @@
       var before = state.card, changed = !before || state.error || before.stamps !== card.stamps || before.freeDrinks !== card.freeDrinks || before.member !== card.member;
       state.error = false;
       if (before) {
-        if (card.freeDrinks > before.freeDrinks) state.msg = { text: 'Enjoy your free drink! A new card has started.' + (demo ? ' (preview)' : ''), ok: true };
-        else if (card.stamps > before.stamps) {
-          state.fresh = []; for (var i = before.stamps; i < card.stamps; i++) state.fresh.push(i);
-          state.msg = { text: 'New cat stamp: ' + CATNAMES[card.stamps - 1] + '! ' + card.stamps + ' of ' + SIZE + '.' + (!before.member && card.member ? ' Welcome, member No.' + pad(card.member) + '!' : ''), ok: true };
+        if (card.freeDrinks > before.freeDrinks) {
+          state.fresh = card.stamps ? [0] : []; state.cheer = -1;
+          state.msg = { text: 'Enjoy your free drink! Your next card already has ' + (card.bonus === 1 ? '1 bonus stamp' : card.bonus + ' bonus stamps') + ' on us.', ok: true };
+        } else if (card.stamps > before.stamps) {
+          state.fresh = []; state.cheer = -1; for (var i = before.stamps; i < card.stamps; i++) state.fresh.push(i);
+          state.msg = { text: 'New cat stamp: ' + CATNAMES[card.stamps - 1] + '! ' + CHEERS[card.stamps - 1] + (!before.member && card.member ? ' Welcome, member No.' + pad(card.member) + '!' : ''), ok: true };
         }
       }
+      if (!before && state.welcome) { state.welcome = false; state.fresh = []; for (var j = 0; j < card.bonus; j++) state.fresh.push(j); }   // the welcome stamps land
       state.card = card;
       if (card.member && state.code && !demo) store(MEMBER_KEY, JSON.stringify({ code: state.code, member: card.member }));
       return changed;
@@ -604,20 +622,31 @@
       var n = c.stamps, h = '<div class="stamp-card__head"><div class="stamp-card__names">' +
         '<img class="stamp-card__logo" src="' + esc(LOGO) + '" alt="Chibiro Coffee" width="84" height="43"><span class="stamp-card__title">Stamp Card</span></div>' +
         '<span class="stamp-card__no"><span class="stamp-card__no-label">Member</span><span class="stamp-card__no-num">No.' + (c.member ? pad(c.member) : '----') + '</span></span></div><ol class="stamp-grid">';
+      var bonus = Math.min(c.bonus || 0, n);
       for (var i = 0; i < SIZE; i++) {
-        var on = i < n, last = i === SIZE - 1, cls = 'stamp-slot' + (on ? ' is-stamped' : '') + (last && !on ? ' is-reward' : '') + (on && i === n - 1 ? ' is-new' : '') + (state.fresh.indexOf(i) >= 0 ? ' is-fresh' : '');
-        h += '<li class="' + cls + '" title="' + esc(CATNAMES[i]) + '"><img class="stamp-head" src="' + headURL(i) + '" alt="" width="20" height="20">' +
-          (on ? '<span class="stamp-slot__date">' + esc(short(c.dates[i] || '')) + '</span>' : last ? '<span class="stamp-slot__free">Free<br>Drink</span>' : '<span class="stamp-slot__num">' + (i + 1) + '</span>') + '</li>';
+        var on = i < n, last = i === SIZE - 1, cls = 'stamp-slot' + (on ? ' is-stamped' : '') + (on && i < bonus ? ' is-bonus' : '') + (last && !on ? ' is-reward' : '') + (on && i === n - 1 && !sample ? ' is-new' : '') + (state.fresh.indexOf(i) >= 0 ? ' is-fresh' : '');
+        h += '<li class="' + cls + '" title="' + esc(CATNAMES[i] + (on ? ': ' + CHEERS[i] : '')) + '"' + (on && !sample ? ' data-stamp="cheer" data-i="' + i + '"' : '') + '><img class="stamp-head" src="' + headURL(i) + '" alt="" width="20" height="20">' +
+          (on ? '<span class="stamp-slot__date">' + (i < bonus ? 'Bonus' : esc(short(c.dates[i] || ''))) + '</span>' : last ? '<span class="stamp-slot__free">Free<br>Drink</span>' : '<span class="stamp-slot__num">' + (i + 1) + '</span>') + '</li>';
       }
-      h += '</ol><div class="stamp-card__foot"><div class="stamp-meter"><span data-fill="' + Math.round(n / SIZE * 100) + '"></span></div>';
+      // the progress bar: one pixel block per stamp, the last block is the free drink
+      h += '</ol><div class="stamp-card__foot"><div class="stamp-bar' + (n >= NUDGE_FROM ? ' is-close' : '') + '" role="progressbar" aria-label="Stamps toward your free drink" aria-valuemin="0" aria-valuemax="' + SIZE + '" aria-valuenow="' + n + '"><span class="stamp-bar__track">';
+      for (var k = 0; k < SIZE; k++) h += '<span class="stamp-bar__seg' + (k < n ? ' is-on' : '') + (k === SIZE - 1 ? ' is-goal' : '') + '"></span>';
+      h += '</span><span class="stamp-bar__goal">' + (n >= SIZE ? 'Ready!' : 'Free drink') + '</span></div>';
       h += '<p class="stamp-card__count"><b>' + n + '/' + SIZE + '</b> · ' + (n >= SIZE ? 'your free drink is ready!' : (SIZE - n) + ' more cat' + (SIZE - n > 1 ? 's' : '') + ' to a free drink') + '</p>';
-      if (c.expires) h += '<p class="stamp-card__exp">Expires <b>' + esc(longDate(c.expires)) + '</b> · one month after the last stamp</p>';
+      var ci = state.cheer >= 0 && state.cheer < n && !sample ? state.cheer : n - 1;
+      if (ci >= 0) h += '<p class="stamp-cheer"><span class="stamp-cheer__no">' + (ci + 1) + '</span>' + esc(CHEERS[ci]) + '</p>';
+      var left = c.expires ? daysLeft(c.expires) : null;
+      if (c.expires && n >= NUDGE_FROM && n < SIZE && left !== null && left <= NUDGE_DAYS) {   // a nearly full card that is about to run out
+        var togo = SIZE - n;
+        h += '<p class="stamp-nudge" role="note">Your card expires ' + (left <= 0 ? 'today' : left === 1 ? 'tomorrow' : 'in ' + left + ' days') +
+          ', only ' + togo + ' to go.<small>Last day: ' + esc(longDate(c.expires)) + '. One more visit adds a month.</small></p>';
+      } else if (c.expires) h += '<p class="stamp-card__exp">Expires <b>' + esc(longDate(c.expires)) + '</b> · one month after the last stamp</p>';
       else if (n >= SIZE) h += '<p class="stamp-card__exp">Show your QR code at the counter to claim it.</p>';
-      else h += '<p class="stamp-card__exp">' + (sample ? 'Sample card' : 'A card expires one month after its last stamp') + '</p>';
+      else h += '<p class="stamp-card__exp">' + (sample ? 'Sample card' : 'Your expiry date starts with your first visit stamp') + '</p>';
       return h + '</div>';
     }
     var LOGO = (document.querySelector('.cb-nav__brand img') || {}).src || '';
-    var SAMPLE = { member: 308, stamps: 6, dates: ['2026-11-03', '2026-11-05', '2026-11-07', '2026-11-10', '2026-11-12', '2026-11-16'], expires: '2026-12-16T15:59:59Z', freeDrinks: 0 };
+    var SAMPLE = { member: 308, stamps: 5, bonus: WELCOME, dates: ['', '', '', '2026-11-12', '2026-11-16'], expires: '2026-12-16T15:59:59Z', freeDrinks: 0 };
     var sideHTML = side.innerHTML;
     function fill() { [].forEach.call(cardEl.querySelectorAll('[data-fill]'), function (s) { s.style.width = s.dataset.fill + '%'; }); }
     function render() {
@@ -634,7 +663,7 @@
       cardEl.innerHTML = c ? cardHTML(c) : '<p class="stamp-wait">' + (state.error ? 'Couldn\'t check your card. Check your internet and try again.' : 'Loading your card…') + '</p>';
       fill();
       var h = '<h3 class="stamp-how__title">Your card</h3>';
-      if (demo) h += '<p class="stamp-demo"><b>Preview mode.</b> Not linked to the Google Sheet yet, so this card only lives in this browser. Tap the button under the QR code to see a stamp land.</p>';
+      if (demo) h += '<p class="stamp-demo"><b>Preview mode.</b> Not linked to the Google Sheet, so this card only lives in this browser. Tap the button under the QR code to see a stamp land.</p>';
       // a status message stays up for at least 8 seconds, then leaves at the next redraw (it never sticks around for good)
       if (state.msg && state.msg.at && Date.now() - state.msg.at > 8000) state.msg = null;
       if (state.msg) { if (!state.msg.at) state.msg.at = Date.now(); h += '<p class="stamp-msg' + (state.msg.ok ? ' stamp-msg--ok' : '') + '" role="status">' + esc(state.msg.text) + '</p>'; }
@@ -659,6 +688,13 @@
       side.innerHTML = h; side.dataset.mode = 'card';
       state.fresh = [];
     }
+    // preview page only (no Apps Script link): jump the card to a ready-made state, or null for "no card yet"
+    if (demo) window.chibiroStampDemo = function (d, msg) {
+      stopLive(); demoSave(d); state.cheer = -1; state.deleted = null; state.card = null; state.fresh = [];
+      if (d === null) { state.code = null; store(CARD_KEY, null); state.msg = null; render(); return; }
+      if (!state.code) { state.code = newCode(); store(CARD_KEY, state.code); }
+      state.welcome = d.stamps === d.bonus; apply(demoCard()); state.msg = msg ? { text: msg, ok: true } : null; render();
+    };
 
     // A card on this phone that was deleted somewhere else: its QR code stays up, so staff can restore it within 7 days
     function renderDeleted() {
@@ -768,7 +804,7 @@
       var n = state.card ? state.card.stamps : 0;
       if (!window.confirm('Delete your Chibiro stamp card?\n\n' + (n ? 'Your ' + n + ' stamp' + (n > 1 ? 's' : '') + ' will go with it. ' : '') + 'It stops working right away. For 7 days the café can still bring it back if you show its QR code at the counter (a saved card picture works). After that it is erased for good.')) return;
       var gone = function (until) {
-        stopLive(); markGone(state.code); store(CARD_KEY, null); store(MEMBER_KEY, null); if (demo) store(DEMO_KEY, null);
+        stopLive(); markGone(state.code); store(CARD_KEY, null); store(MEMBER_KEY, null); if (demo) demoSave(null);
         state.code = null; state.card = null; state.deleted = null; state.homeHint = false;
         state.msg = { text: 'Your card is deleted. ' + (until ? 'Changed your mind? Show a saved card picture at the counter before ' + longDate(until) + ' and we can bring it back. ' : '') + 'You can get a new card any time.', ok: true };
         if (/card=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search + '#stamps');
@@ -834,9 +870,10 @@
     document.getElementById('stamps').addEventListener('click', function (e) {
       var b = e.target.closest('[data-stamp]'); if (!b) return;
       var act = b.dataset.stamp;
-      if (act === 'get') { state.code = newCode(); store(CARD_KEY, state.code); state.card = null; state.msg = { text: 'Your card is ready! Show the QR code when you order.', ok: true }; render(); startLive(); }
+      if (act === 'get') { if (demo) demoSave(null); state.code = newCode(); store(CARD_KEY, state.code); state.card = null; state.welcome = true; state.msg = { text: 'Your card is ready, with ' + WELCOME + ' welcome stamps on us! Show the QR code when you order.', ok: true }; render(); startLive(); }
+      else if (act === 'cheer') { state.cheer = +b.dataset.i; render(); }
       else if (act === 'check') { state.msg = null; startLive(); }
-      else if (act === 'fresh') { markGone(state.code); store(MEMBER_KEY, null); state.deleted = null; state.code = newCode(); store(CARD_KEY, state.code); state.card = null; state.msg = { text: 'Your new card is ready! Show the QR code when you order.', ok: true }; render(); startLive(); }
+      else if (act === 'fresh') { markGone(state.code); store(MEMBER_KEY, null); state.deleted = null; state.code = newCode(); store(CARD_KEY, state.code); state.card = null; state.msg = { text: 'Your new card is ready, with ' + WELCOME + ' welcome stamps on us! Show the QR code when you order.', ok: true }; render(); startLive(); }
       else if (act === 'back') { var prev = load(PREV_KEY); if (validCode(prev) && !isGone(prev)) { store(PREV_KEY, state.code); state.code = prev; store(CARD_KEY, prev); state.card = null; say('Switched back to your other card.', true); startLive(); } }
       else if (act === 'demo') { apply(demoStamp()); render(); }
       else if (act === 'save') saveCard(b);
